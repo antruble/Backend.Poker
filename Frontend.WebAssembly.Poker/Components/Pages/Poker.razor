@@ -1,0 +1,155 @@
+﻿@* @page "/poker/{gameId?}"
+@rendermode InteractiveServer
+@inject HttpClient Http
+
+@if (isLoading)
+{
+    <p>Betöltés...</p>
+}
+else if (hasError)
+{
+    <p>Hiba történt a játék betöltése során.</p>
+}
+else if (game == null)
+{
+    <p>Nincs megjeleníthető játék.</p>
+}
+else
+{
+    <div class="game-info">
+        <p><strong>Game ID:</strong> @game.Id</p>
+        <p><strong>Játék állapota:</strong> @game.Status</p>
+        <p><strong>Hand állapota:</strong> @game.CurrentHand?.HandStatus</p>
+        @if (Winners.Count > 0)
+        {
+            @foreach (var winner in Winners)
+            {
+                <p><strong>Győztes:</strong> @winner.PlayerId</p>
+            }
+        }
+        <div>
+            @{
+                string text = game.CurrentHand?.HandStatus == HandStatus.End ? "Start new hand" : "Deal next round";
+            }
+            <button @onclick="DealNextRound">@text</button>
+        </div>
+    </div>
+    <div class="d-flex">
+        <div class="players col-3">
+            <h4>Játékosok</h4>
+            @foreach (var player in game.Players)
+            {
+                <div class="player">
+                    <h5>@player.Name (@player.Chips chips)</h5>
+                    <div class="player-cards">
+                        @foreach (var card in player.HoleCards)
+                        {
+                            <div class="card">
+                                <div class="rank">@card.DisplayValue</div>
+                                <div class="suit">@card.Suit</div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+
+        <div class="community-cards col-9 bg-info-subtle d-flex justify-content-center">
+            <h1>Community</h1>
+            @if (game.Status == GameStatus.InProgress && game.CurrentHand != null && game.CurrentHand.CommunityCards.Count > 0)
+            {
+                @foreach (var card in game.CurrentHand.CommunityCards)
+                {
+                    <div class="card">
+                        <div class="rank">@card.DisplayValue</div>
+                        <div class="suit">@card.Suit</div>
+                    </div>
+                }
+            }
+        </div>
+    </div>
+
+    
+
+}
+
+@code {
+
+    [Parameter]
+    public string GameId { get; set; }
+
+    private Game? game;
+    private IList<Winner> Winners = new List<Winner>();
+    private bool isLoading = true;
+    private bool hasError = false;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        try
+        {
+            // Ha nincs megadva gameId, döntsd el, mit szeretnél:
+            // - Alapértelmezett játékot töltesz be,
+            // - vagy átirányítasz egy hibakezelő oldalra
+            if (string.IsNullOrEmpty(GameId))
+            {
+                Console.WriteLine("nincsen");
+                return;
+            }
+
+            // Ha van gameId, lekérjük a játékot:
+            if (Guid.TryParse(GameId, out var gameGuid))
+            {
+                var url = $"getgame?gameId={gameGuid}";
+                game = await Http.GetFromJsonAsync<Game>(url);
+            }
+            else
+            {
+                Console.WriteLine("nem sikerült");
+                return;
+            }
+        }
+        catch (HttpRequestException ex)
+        {
+            Console.WriteLine($"HTTP error: {ex.Message}");
+            hasError = true;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Unexpected error: {ex.Message}");
+            hasError = true;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+    
+    public async Task DealNextRound()
+    {
+        try
+        {
+            if (game == null)
+            {
+                return;
+            }
+
+            game = await Http.GetFromJsonAsync<Game>($"dealnext?gameId={game.Id}");
+            
+            if (game?.CurrentHand?.HandStatus == HandStatus.Shutdown)
+            {
+                Winners = await Http.GetFromJsonAsync<IList<Winner>>($"getwinners?handId={game.CurrentHand.Id}");
+            }
+        }
+        catch (HttpRequestException ex)
+        {
+            Console.WriteLine($"HTTP error: {ex.Message}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Unexpected error: {ex.Message}");
+        }
+        
+    }
+
+}
+ *@

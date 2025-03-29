@@ -1,0 +1,24 @@
+﻿@page "/poker"
+@inject HttpClient Http
+
+<h3>Poker</h3>
+
+@code {
+    private Game game;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            game = await Http.GetFromJsonAsync<List<OrderDto>>("orders");
+        }
+        catch (HttpRequestException ex)
+        {
+            Console.WriteLine($"HTTP error: {ex.Message}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Unexpected error: {ex.Message}");
+        }
+    }
+}

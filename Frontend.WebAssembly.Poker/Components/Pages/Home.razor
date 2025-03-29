@@ -1,0 +1,254 @@
+﻿@page "/"
+@using Frontend.WebAssembly.Poker.Engine
+@using Frontend.WebAssembly.Poker.Services
+
+@rendermode InteractiveServer
+@inject GameStateService GameState
+@inject HttpClient Http
+@inject ILoggerFactory LoggerFactory
+@inject ILogger<Home> Logger
+
+@if (isLoading)
+{
+    <p class="text-center">Betöltés...</p>
+}
+else if (hasError)
+{
+    <p class="text-center text-danger">Hiba történt a játék betöltése során.</p>
+}
+else if (_engine is null || GameState.CurrentGame is null)
+{
+    <p class="text-center">Nincs megjeleníthető játék.</p>
+    <div class="text-center mt-3">
+        <button class="btn btn-success" @onclick="CreateNewGame">Új játék indítása</button>
+    </div>
+}
+else
+{
+    {
+        <!-- Játékinfo panel -->
+        <div class="container">
+            @if (GameState.CurrentGame.CurrentHand is not null)
+            {
+                <h1>Pot: @GameState.CurrentGame.CurrentHand.Pot.MainPot</h1>
+                <!-- Poker asztal -->
+                <div class="poker-table">
+                    <!-- Közösségi lapok -->
+                    <div class="community-cards">
+                        @if (GameState.CurrentGame.CurrentHand.CommunityCards.Any())
+                        {
+                            @foreach (var card in GameState.CurrentGame.CurrentHand.CommunityCards)
+                            {
+                                <div class="card @card.Suit.ToString().ToLower()">
+                                    <div class="rank">@card.DisplayValue</div>
+                                    <div class="suit">@GetSuitSymbol(card.Suit)</div>
+                                </div>
+                            }
+                        }
+                    </div>
+
+                    <!-- Dealer -->
+                    <div class="seat-dealer">
+                        <strong>Dealer</strong>
+                    </div>
+
+                    <!-- Játékos ülések -->
+                    @if (GameState.CurrentGame.Players is not null)
+                    {
+                        @foreach (var player in GameState.CurrentGame.Players)
+                        {
+                            string cssClasses = string.Empty;
+                            // Ha van nyertes, és a jelenlegi játékos az az, akkor jelenítsük meg
+                            if (GameState.CurrentGame.CurrentGameAction == GameActions.ShowOff 
+                                && GameState.Winners != null
+                                && GameState.Winners.Any(w => w.PlayerId == player.Id))
+                            {
+                                cssClasses += "bg-warning ";
+                            }
+                            // Ha játékos action következik és a jelenlegi játékos a soron következő, akkor jelenítsük meg
+                            if (GameState.CurrentGame.CurrentGameAction == GameActions.PlayerAction 
+                                && player.PlayerStatus == PlayerStatus.PlayersTurn)
+                            {
+                                cssClasses += "border border-primary bg-success ";
+                            }
+
+                            // Játékos komponens:
+                            <div class="player-seat seat-@player.Seat @cssClasses">
+                                <strong>@player.Name</strong>
+                                <div>@player.Chips chips</div>
+
+                                @if (player.BlindStatus == BlindStatus.SmallBlind)
+                                {
+                                    <div>Kis VAK</div>
+                                }
+                                else if (player.BlindStatus == BlindStatus.BigBlind)
+                                {
+                                    <div>Nagy VAK</div>
+                                }
+                                @if (player.PlayerStatus != PlayerStatus.Folded)
+                                {
+                                    <div class="player-cards">
+
+                                        @if (GameState.CurrentGame.CurrentGameAction == GameActions.ShowOff
+                                            || _engine.GetUserId() == player.Id || player.PlayerStatus == PlayerStatus.AllIn)
+                                        {
+                                            @foreach (var card in player.HoleCards)
+                                            {
+                                                <div class="card @card.Suit.ToString().ToLower()">
+                                                    <div class="rank">@card.DisplayValue</div>
+                                                    <div class="suit">@GetSuitSymbol(card.Suit)</div>
+                                                </div>
+                                            }
+                                        }
+                                        else
+                                        {
+                                            for (int i = 0; i < 2; i++)
+                                            {
+                                                <div class="card back">
+                                                </div>
+                                            }    
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        }
+                    }
+                </div>
+
+                @if (GameState.CurrentGame.CurrentGameAction == GameActions.PlayerAction && _engine.GetUserId() == _engine.GetCurrentPlayersId())
+                {
+                    <!-- Action toolbar: játékos akciógombok -->
+                    <div class="action-toolbar-container">
+                        <div class="action-toolbar shadow">
+                            <button class="btn btn-danger action-btn" @onclick="Fold">Fold</button>
+                            <button class="btn btn-primary action-btn" @onclick="Call">Call</button>
+                            <div class="raise-container">
+                                <label for="raiseRange" class="raise-label">Raise: @raiseAmount</label>
+                                <input id="raiseRange" type="range" min="0" max="@MaxRaise" @bind="raiseAmount" class="raise-slider" />
+                                <button class="btn btn-success action-btn" @onclick="() => Raise(raiseAmount)">Raise</button>
+                            </div>
+                        </div>
+                    </div>
+                }
+
+
+                <!-- Bot akciók visszajelzése -->
+                @* <div class="text-center mt-3">
+                <p><strong>Bot Akció:</strong> @game.CurrentHand.</p>
+            </div> *@
+            }
+            else
+            {
+                <div>Betöltés..</div>
+            }
+        </div>
+    }
+
+}
+
+
+@code {
+
+    private bool isLoading = true;
+    private bool hasError = false;
+
+    private PokerGameEngine? _engine;
+
+    private int raiseAmount = 0;
+    private int MaxRaise
+    {
+        get
+        {
+            var player = GameState.CurrentGame?.Players?.FirstOrDefault(p => p.Id == _engine.GetUserId());
+            return player?.Chips ?? 0;
+        }
+    }
+
+
+    protected override async Task OnInitializedAsync()
+    {
+        Logger.LogInformation("Alkalmazás elindítva");
+        try
+        {
+            GameState.OnChange += RefreshUI;
+
+            var game = await GetGameAsync();
+            if (game != null)
+            {
+                StartGameEngine(game);
+            }
+            isLoading = false;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Init error: {ex.Message}");
+            hasError = true;
+        }
+    }
+
+    private async void RefreshUI()
+    {
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void StartGameEngine(Game game)
+    {
+
+        var engineLogger = LoggerFactory.CreateLogger<PokerGameEngine>();
+        _engine = new PokerGameEngine(game, Http, engineLogger, StateHasChanged, GameState);
+        _engine.Start();
+        isLoading = false;
+    }
+    private async Task<Game?> GetGameAsync()
+    {
+        var games = await Http.GetFromJsonAsync<IList<Game>>("games");
+        return games?.FirstOrDefault();
+    }
+
+    private async Task CreateNewGame()
+    {
+        try
+        {
+            var request = new
+            {
+                NumOfBots = 5, // Állítsd be a botok számát igény szerint
+                PlayerName = "Játékos" // Ezt akár be is kérheted egy input mezőből
+            };
+
+            var response = await Http.PostAsJsonAsync("newgame", request);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var game = await response.Content.ReadFromJsonAsync<Game>() ?? throw new NullReferenceException("nem null");
+
+                StartGameEngine(game);
+
+                await InvokeAsync(StateHasChanged);
+            }
+            else
+            {
+                Console.WriteLine($"Error creating game: {await response.Content.ReadAsStringAsync()}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"CreateNewGame error: {ex.Message}");
+        }
+    }
+
+    private string GetSuitSymbol(Suit suit) =>
+        suit switch
+        {
+            Suit.Clubs => "♣",
+            Suit.Diamonds => "♦",
+            Suit.Hearts => "♥",
+            Suit.Spades => "♠",
+            _ => ""
+        };
+    
+    private void Fold() => _engine!.RecordPlayerAction(new PlayerAction(PlayerActionType.Fold, null));
+    private void Call() => _engine!.RecordPlayerAction(new PlayerAction(PlayerActionType.Call, null));
+    private void Raise(int amount) => _engine!.RecordPlayerAction(new PlayerAction(PlayerActionType.Raise, amount));
+
+    public void Dispose() => GameState.OnChange -= RefreshUI;
+}
