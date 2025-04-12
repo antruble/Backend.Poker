@@ -14,7 +14,6 @@ namespace Frontend.WebAssembly.Poker.Services
 
         // Tárolja az aktuális játék állapotát.
         private Game? _currentGame;
-        private Guid? _currentPlayerId;
         private ICollection<Winner>? _winners;
 
         public Game? CurrentGame
@@ -35,15 +34,6 @@ namespace Frontend.WebAssembly.Poker.Services
                 NotifyStateChanged();
             }
         }
-        public Guid? CurrentPlayerId
-        {
-            get => _currentPlayerId;
-            private set
-            {
-                _currentPlayerId = value;
-                NotifyStateChanged();
-            }
-        }
 
         public void SetWinners(ICollection<Winner> winners)
         {
@@ -52,8 +42,6 @@ namespace Frontend.WebAssembly.Poker.Services
         // Az állapot frissítését végző metódus.
         //public void UpdateGame(Game newGame) => CurrentGame = newGame;
         public void UpdateGame(Game newGame) => CurrentGame = newGame;
-        public void UpdateCurrentPlayerId(Guid currentPlayerId) => CurrentPlayerId = currentPlayerId;
-
 
         // Az esemény kiváltása, ha az állapot változik.
         private void NotifyStateChanged() => OnChange?.Invoke();

@@ -28,6 +28,8 @@ namespace Backend.Poker.Domain.Entities
         //public Guid CurrentPlayerId { get; set; }
         public Guid FirstPlayerId { get; set; }
         public Guid PivotPlayerId { get; set; }
+        public Guid CurrentPlayerId { get; set; }
+        public bool SkipActions { get; set; } = false;
 
         [NotMapped]
         [JsonIgnore]
@@ -46,9 +48,9 @@ namespace Backend.Poker.Domain.Entities
         }
 
         [JsonConstructor]
-        public Hand(Guid id, List<Card> communityCards, HandStatus handStatus, Pot pot)
+        public Hand(Guid id, List<Card> communityCards, HandStatus handStatus, Pot pot, bool skipActions)
         {
-            (Id, CommunityCards, HandStatus, Pot) = (id, communityCards, handStatus, pot);
+            (Id, CommunityCards, HandStatus, Pot, SkipActions) = (id, communityCards, handStatus, pot, SkipActions);
         }
 
         public void DealHoleCards(IList<Player> players)

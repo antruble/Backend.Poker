@@ -15,6 +15,7 @@ namespace Backend.Poker.Domain.Entities
         public int Chips { get; private set; }
         public bool IsBot { get; private set; }
         public int Seat { get; set; }
+        public bool HasToRevealCards { get; set; } = false;
         public List<Card> HoleCards { get; private set; }
         public BlindStatus BlindStatus { get; set; }
         public PlayerStatus PlayerStatus { get; set; }
@@ -43,7 +44,13 @@ namespace Backend.Poker.Domain.Entities
             => (Id, Name, Chips, IsBot, Seat, HoleCards, ActionsHistory) = (id, name, chips, isBot, seat, holeCards, actionsHistory);
 
 
-        public void DeductChips(int amount) => Chips -= amount;
+        public void DeductChips(int amount)
+        {
+            if (amount > Chips || amount <= 0)
+                throw new Exception($"Something went wrong. Amount of chips: {amount}");
+
+            Chips -= amount;
+        }
         public void AddChips(int amount) => Chips += amount;
         public void ResetHoleCards() => HoleCards = new List<Card>();
         public void HandleAction(PlayerAction action)
@@ -70,6 +77,15 @@ namespace Backend.Poker.Domain.Entities
                     return;
             }
         }
+        public void ResetPlayerAttributes()
+        {
+            BlindStatus = BlindStatus.None;
+            if (PlayerStatus != PlayerStatus.Lost)
+                PlayerStatus = PlayerStatus.Waiting;
+
+            ResetHoleCards();
+        }
+        public void Fold() => PlayerStatus = PlayerStatus.Folded;
     }
 
     public enum PlayerActionType
@@ -84,7 +100,6 @@ namespace Backend.Poker.Domain.Entities
         Lost,
         Folded,
         Waiting,
-        PlayersTurn,
         AllIn
     }
     public enum BlindStatus

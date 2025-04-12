@@ -24,6 +24,9 @@ namespace Backend.Poker.Infrastructure.DependencyInjection
                 options.UseSqlServer(configuration.GetConnectionString("DefaultConnection")));
            
             services.AddScoped<IUnitOfWork, UnitOfWork>();
+
+
+
             services.AddScoped<IBotService, BotService>();
             services.AddScoped<IPlayerService, PlayerService>();
             services.AddScoped<IPokerHandEvaluator, PokerHandEvaluator>();

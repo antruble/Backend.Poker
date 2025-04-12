@@ -9,6 +9,6 @@ namespace Backend.Poker.Application.Interfaces
 {
     public interface IBotService
     {
-        Task<PlayerAction> GenerateBotActionAsync(Guid botId);
+        Task<PlayerAction> GenerateBotActionAsync(Guid botId, int amount);
     }
 }

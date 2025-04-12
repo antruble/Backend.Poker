@@ -11,6 +11,7 @@ using Backend.Poker.Domain.Services;
 using Backend.Poker.Domain.ValueObjects;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
+using static System.Collections.Specialized.BitVector32;
 
 namespace Backend.Poker.Infrastructure.Services
 {
@@ -44,14 +45,17 @@ namespace Backend.Poker.Infrastructure.Services
             //_eventPublisherService = eventPublisherService;
         }
 
-        public async Task<IList<Game>> GetGamesAsync()
+        public async Task<Game> GetGameAsync()
         {
             var games = await _unitOfWork.Games.GetAllAsync(filter: g => g.Status != GameStatus.Completed, includeProperties:"Players,CurrentHand");
-            games.ToList().ForEach(g => {
-                g.Players = g.Players.OrderBy(p => p.Seat).ToList();
-            });
 
-            return games.OrderBy(g => g.CreatedOnUtc).ToList();
+            var game = 
+                games.ToList().OrderBy(g => g.Id).FirstOrDefault() 
+                ?? await StartNewGameAsync(5);
+
+            game.Players = [.. game.Players.OrderBy(p => p.Seat)];
+
+            return game;
         }
         public async Task<Game?> GetGameByIdAsync(Guid gameId)
         {
@@ -76,24 +80,21 @@ namespace Backend.Poker.Infrastructure.Services
         {
             var game = await _unitOfWork.Games.GetByIdAsync(gameId)
                        ?? throw new Exception($"Nem található játék az alábbi azonosítóval: {gameId}");
-            game.CurrentGameAction = GameActions.PlayerAction;
+            if (!game.CurrentHand!.SkipActions)
+                game.CurrentGameAction = GameActions.PlayerAction;
+            else
+                game.CurrentGameAction = GameActions.DealNextRound;
             await _unitOfWork.SaveChangesAsync();
         }
-        public async Task<Game> ProcessActionAsync(Guid gameId, Guid playerId, PlayerAction action)
+        public async Task<Game> ProcessActionAsync(Game game, Player player, PlayerAction action)
         {
-            var game = await _unitOfWork.Games.GetByIdAsync(gameId)
-                       ?? throw new Exception($"Error.ProcessActionAsync: {gameId} ID-jű game nem található");
-
-            var player = await _playerService.GetPlayerByIdAsync(playerId);
-
+            _logger.LogInformation($"LEFUTOTT A ProcessActionAsync");
             if (game.GetCurrentPlayersId() != player.Id)
                 throw new Exception("Error.ProcessActionAsync: nem a soron következő játékos hívta meg a függvényt. függvényt meghívó játékos: {player.Id} jelenlegi játékos: {game.GetCurrentPlayersId()} ");
-
-
-            action = await ValidateAndFixActionAsync(game, player, action);
-
-            // Ha fold => PlayerAction legyen fold, ha raise/call, akkor vonja le a zsetont
-            player.HandleAction(action);
+            if (game.CurrentHand!.SkipActions)
+                throw new Exception($"Error.ProcessActionAsync: a skip actions nem kéne, hogy true legyen");
+            
+            HandleAction(game, player, action);
 
             // bezárölt kör -> vagy új kör, vagy vége a hand
             if (game.IsNextPlayerPivot())
@@ -101,18 +102,18 @@ namespace Backend.Poker.Infrastructure.Services
                 // River utolsó embere a hand vége
                 if (game.CurrentHand!.HandStatus == HandStatus.River)
                 {
-                    _logger.LogInformation($"A következő játékos a pivot játékos, és river van, ezért a handnek vége");
-                    game.CurrentHand.Pot.CreateSidePots();
-
-                    await CompleteHandAndSaveWinnersAsync(game);
-                    await EliminateChiplessPlayersAsync(game);
-
-                    game.CurrentGameAction = GameActions.ShowOff;
+                    await ProcessFinishedHandAsync(game);
                 }
                 else // Még nem zárult be a hand, csak egy kör
                 {
                     _logger.LogInformation($"A következő játékos a pivot játékos, de még nincs river, ezért a körnek vége");
                     game.CurrentHand.Pot.CompleteRound();
+
+                    game.Players
+                        .Where(p => p.PlayerStatus == PlayerStatus.AllIn)
+                        .ToList()
+                        .ForEach(p => p.HasToRevealCards = true);
+
                     game.CurrentGameAction = GameActions.DealingCards;
                     game = await DealNextRound(game);
                 }
@@ -122,31 +123,58 @@ namespace Backend.Poker.Infrastructure.Services
                 game.CurrentGameAction = GameActions.PlayerAction;
                 game.SwitchToTheNextPlayer(lastPlayer: player);
             }
-
-            if (action.Amount is not null && action.Amount >= player.Chips)
-                player.PlayerStatus = PlayerStatus.AllIn;
             _logger.LogInformation($"Átváltva a következő játékosra (ha nem hand vége volt)");
 
             // Mentjük a változtatásokat
             await _unitOfWork.SaveChangesAsync();
-
             return game;
         }
         public async Task<Game> DealNextRound(Game game)
         {
-            _logger.LogInformation($"Bezárult az előző kör, új kört osztunk. Előző kör: {game.CurrentHand!.HandStatus}");
+            if (game.CurrentHand!.HandStatus == HandStatus.River)
+            {
+                await ProcessFinishedHandAsync(game);
+            }
+            else
+            {
+                if (game.Players.Count(p => p.PlayerStatus == PlayerStatus.Waiting) < 2)
+                    game.CurrentHand!.SkipActions = true;
+                _logger.LogInformation($"Bezárult az előző kör, új kört osztunk. Előző kör: {game.CurrentHand!.HandStatus}");
 
-            var deck = GetCurrentDeck(game);
+                var deck = GetCurrentDeck(game);
 
-            game.SetRoundsFirstPlayerToCurrent();
-            game.SetCurrentPlayerToPivot();
-            game.CurrentHand.DealNextRound(deck!);
+                if (!game.CurrentHand.SkipActions)
+                {
+                    var playerId = game.SetRoundsFirstPlayerToCurrent();
+                    game.SetCurrentPlayerToPivot(playerId);
+                }
 
+                game.CurrentHand.DealNextRound(deck!);
+                game.CurrentGameAction = GameActions.DealingCards;
+            }
             await _unitOfWork.Games.UpdateAsync(game);
             await _unitOfWork.Games.SaveChangesAsync();
 
             return game;
 
+        }
+        public async Task ProcessFinishedHandAsync(Game game)
+        {
+            _logger.LogInformation($"A következő játékos a pivot játékos, és river van, ezért a handnek vége");
+            game.CurrentHand!.Pot.CreateSidePots();
+
+            await CompleteHandAndSaveWinnersAsync(game);
+            await EliminateChiplessPlayersAsync(game);
+
+            game.CurrentGameAction = GameActions.ShowOff;
+        }
+        public async Task<Game> SetGameActionShowOff(Game game)
+        {
+            game.CurrentGameAction = GameActions.ShowOff;
+            await _unitOfWork.Games.UpdateAsync(game);
+            await _unitOfWork.Games.SaveChangesAsync();
+
+            return game;
         }
         private async Task CompleteHandAndSaveWinnersAsync(Game game)
         {
@@ -165,9 +193,15 @@ namespace Backend.Poker.Infrastructure.Services
 
         private async Task EliminateChiplessPlayersAsync(Game game)
         {
-            game.Players.Where(p => p.Chips <= 0).ToList().ForEach(p => p.PlayerStatus = PlayerStatus.Lost);
+            // Nem-bot játékosok esetében, ha chipje <= 0, akkor visszaállítjuk 1000-re
+            foreach (var player in game.Players.Where(p => !p.IsBot && p.Chips <= 0).ToList())
+                player.AddChips(1000);
+
+            game.Players = game.Players.Where(p => p.Chips > 0).ToList();
+
             await _unitOfWork.Players.SaveChangesAsync();
         }
+
         public async Task StartNewHandAsync(Guid gameId)
         {
             var game = await _unitOfWork.Games.GetByIdAsync(gameId)
@@ -214,6 +248,54 @@ namespace Backend.Poker.Infrastructure.Services
             return deck;
         }
 
+        private void HandleAction(Game game, Player player, PlayerAction action)
+        {
+            switch (action.ActionType)
+            {
+                case PlayerActionType.Fold:
+                    player.Fold(); //TODO: ha fold, és emiatt hand vége
+                    break;
+                case PlayerActionType.Call:
+                    HandleCallAction(game, player);
+                    break;
+                case PlayerActionType.Raise:
+                    if (action.Amount is null || action.Amount <= 0)
+                        throw new Exception("Raise volt null, vagy kisebb egyenlő 0 értékű amounttal");
+
+                    HandleRaiseAction(game, player, (int)action.Amount);
+                    break;
+            }
+        }
+        private void HandleCallAction(Game game, Player player)
+        { 
+            var amount = game.CurrentHand!.Pot.GetCallAmountForPlayer(player.Id);
+
+            if (amount == 0)
+                return;
+
+            HandleChipsDeduction(game, player, amount);
+
+        }
+        private void HandleRaiseAction(Game game, Player player, int amount)
+        {
+            HandleChipsDeduction(game, player, amount);
+            game.SetCurrentPlayerToPivot(player.Id);
+        }
+
+        private void HandleChipsDeduction(Game game, Player player, int amount)
+        {
+
+            if (amount >= player.Chips)
+            {
+                amount = player.Chips;
+                player.PlayerStatus = PlayerStatus.AllIn;
+            }
+            player.DeductChips(amount);
+            RegisterContribution(game, player, amount);
+        }
+
+        private void RegisterContribution(Game game, Player player, int amount) => 
+            game.CurrentHand!.Pot.AddContribution(player.Id, amount);
 
         private async Task<PlayerAction> ValidateAndFixActionAsync(Game game, Player player, PlayerAction action)
         {
@@ -239,7 +321,7 @@ namespace Backend.Poker.Infrastructure.Services
                         throw new Exception("Nem kéne itt bajnak");
 
                     game.CurrentHand!.Pot.AddContribution(player.Id, (int)action.Amount);
-                    game.SetCurrentPlayerToPivot();
+                    game.SetCurrentPlayerToPivot(player.Id);
                     break;
             }
 

@@ -2,6 +2,7 @@
 using Backend.Poker.Domain.Entities;
 using Backend.Poker.DTOs;
 using Microsoft.AspNetCore.Mvc;
+using System.Numerics;
 
 namespace Backend.Poker.Controllers
 {
@@ -45,7 +46,7 @@ namespace Backend.Poker.Controllers
             return Ok(game);
         }
 
-        [HttpGet("getgame")]
+        [HttpGet("getgamebyid")]
         public async Task<IActionResult> GetGameById(Guid gameId)
         {
             var game = await _gameService.GetGameByIdAsync(gameId);
@@ -56,11 +57,15 @@ namespace Backend.Poker.Controllers
             return Ok(game);
         }
         
-        [HttpGet("games")]
-        public async Task<IActionResult> Games()
+        [HttpGet("getgame")]
+        public async Task<IActionResult> GetGame()
         {
-            var games = await _gameService.GetGamesAsync();
-            return Ok(games);
+            var game = await _gameService.GetGameAsync();
+
+            if (game is null)
+                return NoContent();
+
+            return Ok(game);
         }
         [HttpGet("getuserid")]
         public async Task<IActionResult> GetUserId(Guid gameId)
@@ -73,7 +78,10 @@ namespace Backend.Poker.Controllers
         {
             try
             {
-                var action = await _botService.GenerateBotActionAsync(botId);
+                var game = await _gameService.GetGameByIdAsync(gameId)
+                    ?? throw new InvalidOperationException($"Nem található game {gameId} ID-val");
+                var callAmount = game.CurrentHand!.Pot.GetCallAmountForPlayer(botId);
+                var action = await _botService.GenerateBotActionAsync(botId, callAmount);
                 return Ok(action);
             }
             catch (Exception ex)
@@ -87,8 +95,17 @@ namespace Backend.Poker.Controllers
         {
             try
             {
-                _logger.LogInformation($"ProcessActionAsync meghívva..");
-                _ = await _gameService.ProcessActionAsync(gameId, playerId, action);
+                var game = await _gameService.GetGameByIdAsync(gameId) 
+                    ?? throw new InvalidOperationException($"Nem található game {gameId} ID-val");
+
+                if (game.CurrentGameAction != GameActions.PlayerAction)
+                    throw new InvalidOperationException($"A game action-ja nem ProcessAction, hanem {game.CurrentGameAction}");
+
+                var player = await _playerService.GetPlayerByIdAsync(playerId)
+                        ?? throw new InvalidOperationException($"Nem található player {playerId} ID-val");
+
+                await _gameService.ProcessActionAsync(game, player, action);
+
                 return Ok();
             }
             catch (Exception ex)
@@ -125,12 +142,16 @@ namespace Backend.Poker.Controllers
             }
         }
 
-        //[HttpGet("dealnext")]
-        //public async Task<IActionResult> DealNextRound(Guid gameId)
-        //{
-        //    var game = await _gameService.DealNextRound(gameId);
-        //    return Ok(game);
-        //}
+        [HttpPost("dealnextround")]
+        public async Task<IActionResult> DealNextRound(Guid gameId)
+        {
+            var game = await _gameService.GetGameByIdAsync(gameId) ?? throw new Exception($"Nem található game {gameId} ID-val!");
+            if (game.CurrentHand!.HandStatus == HandStatus.Shutdown)
+                game = await _gameService.SetGameActionShowOff(game);
+            else
+                game = await _gameService.DealNextRound(game);
+            return Ok(game);
+        }
 
         [HttpGet("getwinners")]
         public async Task<IActionResult> GetWinners(Guid handId)

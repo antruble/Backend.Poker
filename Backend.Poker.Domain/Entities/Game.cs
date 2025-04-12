@@ -41,10 +41,8 @@ namespace Backend.Poker.Domain.Entities
 
         public Hand StartNewHand()
         {
-            Players.Where(p => p.PlayerStatus != PlayerStatus.Lost).ToList().ForEach(p => p.PlayerStatus = PlayerStatus.Waiting);
+            Players.Where(p => p.PlayerStatus != PlayerStatus.Lost).ToList().ForEach(p => { p.PlayerStatus = PlayerStatus.Waiting; p.HasToRevealCards = false; });
             Players = Players.OrderBy(p => p.Seat).ToList();
-
-
 
             var lastSmallBlindPlayer = Players.FirstOrDefault(p => p.BlindStatus == BlindStatus.SmallBlind); // A legutolsó kisvak
 
@@ -61,11 +59,10 @@ namespace Backend.Poker.Domain.Entities
             nextBigBlindPlayer.BlindStatus = BlindStatus.BigBlind;
             nextSmallBlindPlayer.BlindStatus = BlindStatus.SmallBlind;
 
-            var currentPlayer = GetNextPlayer(nextBigBlindPlayer.Id)!;
-
-            currentPlayer.PlayerStatus = PlayerStatus.PlayersTurn;
+            var currentPlayer = GetNextPlayer(nextBigBlindPlayer.Id);
 
             CurrentHand = new Hand(currentPlayer);
+            CurrentHand.CurrentPlayerId = currentPlayer.Id;
             CurrentHand.DealHoleCards(Players);
 
             Status = GameStatus.InProgress;
@@ -78,10 +75,8 @@ namespace Backend.Poker.Domain.Entities
         {
             //Players.Where(p => p.PlayerStatus == PlayerStatus.PlayersTurn).ToList().ForEach(p => p.PlayerStatus = PlayerStatus.Waiting);
             var player = GetNextPlayer(lastPlayer.Id);
-            if (lastPlayer.PlayerStatus != PlayerStatus.Folded && lastPlayer.PlayerStatus != PlayerStatus.AllIn)
-                lastPlayer.PlayerStatus = PlayerStatus.Waiting;
 
-            player.PlayerStatus = PlayerStatus.PlayersTurn;
+            CurrentHand!.CurrentPlayerId = player.Id;
         }
 
         public void DealHoleCards()
@@ -119,35 +114,71 @@ namespace Backend.Poker.Domain.Entities
             return nextPlayer; ;
         }
 
-        public void SetCurrentPlayerToPivot()
+        public void SetCurrentPlayerToPivot(Guid playerId)
         {
-            var currentPlayersId = GetCurrentPlayersId();
-            CurrentHand!.PivotPlayerId = currentPlayersId;
+            CurrentHand!.PivotPlayerId = playerId;
         }
+        public void SetPreviousPlayerToPivot(Guid playerId)
+        {
+            // Csak azokat a játékosokat vesszük figyelembe, akik waiting státuszban vannak,
+            // és rendezzük őket a Seat érték szerint növekvő sorrendbe.
+            var waitingPlayers = Players
+                .Where(p => p.PlayerStatus == PlayerStatus.Waiting)
+                .OrderBy(p => p.Seat)
+                .ToList();
+
+            if (waitingPlayers.Count < 2)
+                throw new Exception("Nem sikerült az előző játékost beállítani, ugyanis már csak max 1db player van waiting státuszban.");
+
+            // Keressük meg a jelenlegi játékos seatjét
+            var player = Players.First(p => p.Id == playerId) ?? throw new Exception("A megadott játékos nincs waiting státuszban.");
+            int index = player.Seat;
+
+            // Körkörös módon, az előző játékos indexe: ha az index 0, akkor a legutolsó lesz, különben index - 1
+            int prevIndex = (index - 1 + waitingPlayers.Count) % waitingPlayers.Count;
+            var prevPlayer = waitingPlayers[prevIndex];
+
+            // A hand pivot játékosának beállítása
+            CurrentHand!.PivotPlayerId = prevPlayer.Id;
+        }
+
+        public int GetActivePlayersCount() => Players.Count(p => p.PlayerStatus != PlayerStatus.Lost && p.PlayerStatus != PlayerStatus.Folded);
+        public int GetWaitingPlayersCount() => Players.Count(p => p.PlayerStatus == PlayerStatus.Waiting);
         public bool IsNextPlayerPivot()
         {
-            var currentPlayersId = GetCurrentPlayersId();
-            return GetNextPlayer(currentPlayersId).Id == CurrentHand!.PivotPlayerId; 
-        }
-        public void SetRoundsFirstPlayerToCurrent()
-        {
-            Players.Where(p => p.PlayerStatus == PlayerStatus.PlayersTurn).ToList().ForEach(p => p.PlayerStatus = PlayerStatus.Waiting);
+            // Rendezzük a játékosokat seat szerint növekvő sorrendbe
+            var sortedPlayers = Players.OrderBy(p => p.Seat).ToList();
 
+            // Keressük meg a lastPlayer-t a rendezett listában
+            var lastPlayer = sortedPlayers.FirstOrDefault(p => p.Id == CurrentHand!.CurrentPlayerId)
+                             ?? throw new ArgumentException("A soron lévő játékos nincsen a playerek között");
+
+            Player? nextPlayer;
+
+            for (int i = 1; i < Players.Count; i++)
+            {
+                nextPlayer = sortedPlayers.First(p => p.Seat == (lastPlayer.Seat + i) % Players.Count);
+                if (nextPlayer.Id == CurrentHand!.PivotPlayerId)
+                    return true;
+                if (nextPlayer.PlayerStatus == PlayerStatus.Waiting)
+                    return false;
+            }
+            throw new Exception("Nincs pivot játékos");
+        }
+        public Guid SetRoundsFirstPlayerToCurrent()
+        {
             var firstPlayer = Players.FirstOrDefault(p => p.Id == CurrentHand!.FirstPlayerId);
-            while (firstPlayer!.PlayerStatus == PlayerStatus.Folded)
+            while (firstPlayer!.PlayerStatus != PlayerStatus.Waiting)
             {
                 firstPlayer = GetNextPlayer(firstPlayer.Id);
             }
-            //CurrentHand!.SetFirstCurrentPlayerId(firstPlayer.Id);
-            Players.First(p => p.Id == firstPlayer.Id).PlayerStatus = PlayerStatus.PlayersTurn;
+            CurrentHand!.CurrentPlayerId = firstPlayer.Id;
+
+            return firstPlayer.Id;
         }
         public Guid GetCurrentPlayersId()
         {
-            var player = Players.Where(p => p.PlayerStatus == PlayerStatus.PlayersTurn).ToList();
-            if (player.Count == 1)
-                return player[0].Id;
-
-            throw new Exception($"Hiba, mivel {player.Count} játékos PlayersTurn státuszú.");
+            return CurrentHand!.CurrentPlayerId;
 
         }
     }
@@ -163,6 +194,7 @@ namespace Backend.Poker.Domain.Entities
         Waiting,
         DealingCards,
         PlayerAction,
+        DealNextRound,
         ShowOff,
     }
 }

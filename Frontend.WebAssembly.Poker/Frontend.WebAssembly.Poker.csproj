@@ -10,4 +10,8 @@
     <ProjectReference Include="..\Backend.Poker.Domain\Backend.Poker.Domain.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="Logs\" />
+  </ItemGroup>
+
 </Project>

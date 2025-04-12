@@ -4,7 +4,7 @@
 
 @rendermode InteractiveServer
 @inject GameStateService GameState
-@inject HttpClient Http
+@inject IHttpClientFactory HttpFactory
 @inject ILoggerFactory LoggerFactory
 @inject ILogger<Home> Logger
 
@@ -18,10 +18,7 @@ else if (hasError)
 }
 else if (_engine is null || GameState.CurrentGame is null)
 {
-    <p class="text-center">Nincs megjeleníthető játék.</p>
-    <div class="text-center mt-3">
-        <button class="btn btn-success" @onclick="CreateNewGame">Új játék indítása</button>
-    </div>
+    <h1 class="text-center text-red">Nincs megjeleníthető játék.</h1>
 }
 else
 {
@@ -67,13 +64,17 @@ else
                             }
                             // Ha játékos action következik és a jelenlegi játékos a soron következő, akkor jelenítsük meg
                             if (GameState.CurrentGame.CurrentGameAction == GameActions.PlayerAction 
-                                && player.PlayerStatus == PlayerStatus.PlayersTurn)
+                                && player.Id == GameState.CurrentGame.GetCurrentPlayersId())
                             {
                                 cssClasses += "border border-primary bg-success ";
                             }
 
                             // Játékos komponens:
                             <div class="player-seat seat-@player.Seat @cssClasses">
+                                @if (GameState.CurrentGame.CurrentHand.PivotPlayerId == player.Id)
+                                {
+                                    <strong>PIVOT</strong>
+                                }
                                 <strong>@player.Name</strong>
                                 <div>@player.Chips chips</div>
 
@@ -90,7 +91,7 @@ else
                                     <div class="player-cards">
 
                                         @if (GameState.CurrentGame.CurrentGameAction == GameActions.ShowOff
-                                            || _engine.GetUserId() == player.Id || player.PlayerStatus == PlayerStatus.AllIn)
+                                           || _engine.GetUserId() == player.Id || player.HasToRevealCards)
                                         {
                                             @foreach (var card in player.HoleCards)
                                             {
@@ -164,76 +165,44 @@ else
         }
     }
 
+    #region Player actions methods
+    private void Fold() => _engine!.RecordPlayerAction(new PlayerAction(PlayerActionType.Fold, null));
+    private void Call() => _engine!.RecordPlayerAction(new PlayerAction(PlayerActionType.Call, null));
+    private void Raise(int amount) => _engine!.RecordPlayerAction(new PlayerAction(PlayerActionType.Raise, amount));
+    #endregion
 
     protected override async Task OnInitializedAsync()
     {
-        Logger.LogInformation("Alkalmazás elindítva");
+        Logger.LogInformation("Kliens elindítva");
         try
         {
             GameState.OnChange += RefreshUI;
-
-            var game = await GetGameAsync();
-            if (game != null)
-            {
-                StartGameEngine(game);
-            }
-            isLoading = false;
+            await StartGameEngineAsync();
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Init error: {ex.Message}");
+            Console.WriteLine($"Error a game inicializálása közben: {ex.Message}");
             hasError = true;
         }
     }
 
-    private async void RefreshUI()
+    private async Task StartGameEngineAsync()
     {
-        await InvokeAsync(StateHasChanged);
-    }
-
-    private void StartGameEngine(Game game)
-    {
-
         var engineLogger = LoggerFactory.CreateLogger<PokerGameEngine>();
-        _engine = new PokerGameEngine(game, Http, engineLogger, StateHasChanged, GameState);
+        _engine = new PokerGameEngine(HttpFactory, engineLogger, StateHasChanged, GameState);
+        await _engine.InitAsync(CancellationToken.None);
         _engine.Start();
         isLoading = false;
     }
-    private async Task<Game?> GetGameAsync()
+
+
+    private async Task<Game> GetGameAsync(HttpClient http) => 
+        await http.GetFromJsonAsync<Game>("getgame")
+        ?? throw new InvalidOperationException("A 'games' API nem adott vissza játékot.");
+
+    private async void RefreshUI()
     {
-        var games = await Http.GetFromJsonAsync<IList<Game>>("games");
-        return games?.FirstOrDefault();
-    }
-
-    private async Task CreateNewGame()
-    {
-        try
-        {
-            var request = new
-            {
-                NumOfBots = 5, // Állítsd be a botok számát igény szerint
-                PlayerName = "Játékos" // Ezt akár be is kérheted egy input mezőből
-            };
-
-            var response = await Http.PostAsJsonAsync("newgame", request);
-
-            if (response.IsSuccessStatusCode)
-            {
-                var game = await response.Content.ReadFromJsonAsync<Game>() ?? throw new NullReferenceException("nem null");
-
-                StartGameEngine(game);
-
-                await InvokeAsync(StateHasChanged);
-            }
-            else
-            {
-                Console.WriteLine($"Error creating game: {await response.Content.ReadAsStringAsync()}");
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"CreateNewGame error: {ex.Message}");
-        }
+        await InvokeAsync(StateHasChanged);
     }
 
     private string GetSuitSymbol(Suit suit) =>
@@ -246,9 +215,7 @@ else
             _ => ""
         };
     
-    private void Fold() => _engine!.RecordPlayerAction(new PlayerAction(PlayerActionType.Fold, null));
-    private void Call() => _engine!.RecordPlayerAction(new PlayerAction(PlayerActionType.Call, null));
-    private void Raise(int amount) => _engine!.RecordPlayerAction(new PlayerAction(PlayerActionType.Raise, amount));
+
 
     public void Dispose() => GameState.OnChange -= RefreshUI;
 }
