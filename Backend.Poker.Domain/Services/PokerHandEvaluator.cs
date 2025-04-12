@@ -34,6 +34,12 @@ namespace Backend.Poker.Domain.Services
             var eligiblePlayers = players.Where(p => p.PlayerStatus != PlayerStatus.Folded && p.PlayerStatus != PlayerStatus.Lost).ToList();
             var winners = new List<Winner>();
 
+            if (eligiblePlayers.Count == 1)
+            {
+                var player = eligiblePlayers[0];
+                var winner = new Winner { HandId = hand.Id, Player = player, PlayerId = player.Id, Pot = hand.Pot.MainPot };
+                return [winner];
+            }
             // 1. Fő pot feldolgozása
             // Feltételezzük, hogy a MainPot értékét a hand.Pot.MainPot tartalmazza.
             if (eligiblePlayers.Any())

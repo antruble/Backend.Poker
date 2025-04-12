@@ -39,6 +39,10 @@ namespace Frontend.WebAssembly.Poker.Services
         {
             Winners = winners;
         }
+        public void ResetWinners()
+        {
+            Winners = [];
+        }
         // Az állapot frissítését végző metódus.
         //public void UpdateGame(Game newGame) => CurrentGame = newGame;
         public void UpdateGame(Game newGame) => CurrentGame = newGame;

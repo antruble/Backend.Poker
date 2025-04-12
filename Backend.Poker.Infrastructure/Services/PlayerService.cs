@@ -33,17 +33,20 @@ namespace Backend.Poker.Infrastructure.Services
             var players = new List<Player>();
 
             // Player
+            var playerSeat = 2;
             players.Add(
                 await _unitOfWork.Players.FindPlayerByName(playerName)
-                                ?? new Player(Guid.NewGuid(), playerName, 2000, false, 2)
+                                ?? new Player(Guid.NewGuid(), playerName, 2000, false, playerSeat)
             );
 
             //Bots
-            for (int i = 0; i <= numOfBots; i++)
+            for (int i = 0; i < numOfBots; i++)
             {
-                if (i == 2)
+                if (i == playerSeat)
+                {
+                    numOfBots++; // Ha a player helyére akarnánk botot rakni, akkor kihagyunk egyet a ciklusban, és növelünk a numOfBots-on, hogy a kihagyott botot is létrehozza
                     continue;
-
+                }
                 var botName = $"Bot{i}";
                 players.Add(
                     await _unitOfWork.Players.FindPlayerByName(botName)

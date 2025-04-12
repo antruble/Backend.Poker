@@ -68,6 +68,8 @@ namespace Backend.Poker.Domain.Entities
         {
             // Rendezés a hozzájárulások szerint (növekvő)
             var sortedContributions = Contributions.OrderBy(pc => pc.Amount).ToList();
+            if (sortedContributions.Count == 0)
+                return;
             // A fő pot már a legalacsonyabb összeggel került kialakításra:
             int baseAmount = sortedContributions.First().Amount;
 

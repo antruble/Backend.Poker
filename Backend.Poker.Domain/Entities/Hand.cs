@@ -125,7 +125,7 @@ namespace Backend.Poker.Domain.Entities
             if (evaluator == null)
                 throw new ArgumentNullException(nameof(evaluator));
 
-            return evaluator.Evaluate(this, players);
+            return evaluator.Evaluate(this, players).ToList();
         }
 
         public Deck RestoreDeck(IList<Card> drawnCards)

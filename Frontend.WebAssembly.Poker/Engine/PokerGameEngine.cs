@@ -170,6 +170,9 @@ namespace Frontend.WebAssembly.Poker.Engine
                         _logger.LogInformation($"GameAction is Waiting: ...");
                         break;
                     case GameActions.DealingCards:
+                        if (_gameStateService.Winners?.Count != 0)
+                            _gameStateService.ResetWinners();
+
                         _logger.LogInformation($"GameAction is DealingCards: várunk 2 mp-t");
                         await Task.Delay((int)(SPEED * 2000), token);
                         await SendCardsHasDealedStatusAsync(token);
@@ -268,7 +271,7 @@ namespace Frontend.WebAssembly.Poker.Engine
 
                 if (completedTask == timeoutTask)
                 {
-                    _logger.LogWarning("1.5.b Timeout történt, default Fold lesz alkalmazva.");
+                    _logger.LogWarning($"1.5.b Timeout történt, default Fold lesz alkalmazva. ThreadID: {System.Threading.Thread.CurrentThread.ManagedThreadId}");
                     _playerActionTcs.TrySetResult(new PlayerAction(PlayerActionType.Fold, null, DateTime.UtcNow));
                 }
                 else

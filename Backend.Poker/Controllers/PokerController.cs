@@ -2,6 +2,7 @@
 using Backend.Poker.Domain.Entities;
 using Backend.Poker.DTOs;
 using Microsoft.AspNetCore.Mvc;
+using System.Collections.Concurrent;
 using System.Numerics;
 
 namespace Backend.Poker.Controllers
@@ -15,6 +16,8 @@ namespace Backend.Poker.Controllers
         private readonly IBotService _botService;
         private readonly ILogger<PokerController> _logger;
 
+        private readonly ConcurrentDictionary<Guid, SemaphoreSlim> _gameLocks = new();
+
         public PokerController(
             IGameService gameService,
             IPlayerService playerService,
@@ -27,12 +30,6 @@ namespace Backend.Poker.Controllers
             _botService = botService;
             _logger = logger;
         }
-
-        //public async Task<IActionResult> Index()
-        //{
-        //    var game = await _gameService.StartNewGameAsync(4);
-        //    return Ok(game);
-        //}
 
         [HttpPost("newgame")]
         public async Task<IActionResult> CreateGame([FromBody] CreateGameRequest request)
@@ -86,6 +83,7 @@ namespace Backend.Poker.Controllers
             }
             catch (Exception ex)
             {
+                _logger.LogError($"GenerateBotAction.Error: {ex.Message}", ex);
                 return BadRequest(ex.Message);
             }
         }
@@ -93,23 +91,29 @@ namespace Backend.Poker.Controllers
         [HttpPost("processaction")]
         public async Task<IActionResult> ProcessActionAsync(Guid gameId, Guid playerId, [FromBody] PlayerAction action)
         {
+           
             try
             {
-                var game = await _gameService.GetGameByIdAsync(gameId) 
-                    ?? throw new InvalidOperationException($"Nem található game {gameId} ID-val");
+                await ProcessGameRequestAsync(gameId, async () =>
+                {
+                    _logger.LogInformation($"Új szál beengedve a ProcessActionAsync belsejébe. ThreadID: {System.Threading.Thread.CurrentThread.ManagedThreadId}");
+                    var game = await _gameService.GetGameByIdAsync(gameId)
+                        ?? throw new InvalidOperationException($"Nem található game {gameId} ID-val");
 
-                if (game.CurrentGameAction != GameActions.PlayerAction)
-                    throw new InvalidOperationException($"A game action-ja nem ProcessAction, hanem {game.CurrentGameAction}");
+                    if (game.CurrentGameAction != GameActions.PlayerAction)
+                        throw new InvalidOperationException($"A game action-ja nem ProcessAction, hanem {game.CurrentGameAction}");
 
-                var player = await _playerService.GetPlayerByIdAsync(playerId)
+                    var player = await _playerService.GetPlayerByIdAsync(playerId)
                         ?? throw new InvalidOperationException($"Nem található player {playerId} ID-val");
 
-                await _gameService.ProcessActionAsync(game, player, action);
-
+                    await _gameService.ProcessActionAsync(game, player, action);
+                });
+               
                 return Ok();
             }
             catch (Exception ex)
             {
+                _logger.LogError($"ProcessActionAsync.Error: {ex.Message}", ex);
                 return BadRequest(ex.Message);
             }
         }
@@ -118,12 +122,16 @@ namespace Backend.Poker.Controllers
         {
             try
             {
-                _logger.LogInformation($"Kártyák kiosztva, gameaction továbbléptetése");
-                await _gameService.CardsDealingActionFinished(gameId);
+                await ProcessGameRequestAsync(gameId, async () => 
+                {
+                    _logger.LogInformation($"Kártyák kiosztva, gameaction továbbléptetése");
+                    await _gameService.CardsDealingActionFinished(gameId);
+                });
                 return Ok();
             }
             catch (Exception ex)
             {
+                _logger.LogError($"CardsHasDealedAsync.Error: {ex.Message}", ex);
                 return BadRequest(ex.Message);
             }
         }
@@ -133,11 +141,15 @@ namespace Backend.Poker.Controllers
         {
             try
             {
-                await _gameService.StartNewHandAsync(gameId);
+                await ProcessGameRequestAsync(gameId, async () =>
+                {
+                    await _gameService.StartNewHandAsync(gameId);
+                });
                 return Ok();
             }
             catch (Exception ex)
             {
+                _logger.LogError($"StartNewHandAsync.Error: {ex.Message}", ex);
                 return BadRequest(ex.Message);
             }
         }
@@ -145,12 +157,16 @@ namespace Backend.Poker.Controllers
         [HttpPost("dealnextround")]
         public async Task<IActionResult> DealNextRound(Guid gameId)
         {
-            var game = await _gameService.GetGameByIdAsync(gameId) ?? throw new Exception($"Nem található game {gameId} ID-val!");
-            if (game.CurrentHand!.HandStatus == HandStatus.Shutdown)
-                game = await _gameService.SetGameActionShowOff(game);
-            else
-                game = await _gameService.DealNextRound(game);
-            return Ok(game);
+            await ProcessGameRequestAsync(gameId, async () =>
+            {
+                var game = await _gameService.GetGameByIdAsync(gameId) ?? throw new Exception($"Nem található game {gameId} ID-val!");
+                if (game.CurrentHand!.HandStatus == HandStatus.Shutdown)
+                    game = await _gameService.SetGameActionShowOff(game);
+                else
+                    game = await _gameService.DealNextRound(game);
+            });
+            var updatedGame = await _gameService.GetGameByIdAsync(gameId);
+            return Ok(updatedGame);
         }
 
         [HttpGet("getwinners")]
@@ -160,5 +176,28 @@ namespace Backend.Poker.Controllers
             return Ok(winners);
         }
 
+
+        #region Gamelocks
+        private SemaphoreSlim GetGameLock(Guid gameId)
+        {
+            return _gameLocks.GetOrAdd(gameId, _ => new SemaphoreSlim(1, 1));
+        }
+
+        public async Task ProcessGameRequestAsync(Guid gameId, Func<Task> action)
+        {
+            var gameLock = GetGameLock(gameId);
+            await gameLock.WaitAsync();
+            try
+            {
+                _logger.LogWarning($"ThreadID ami most lett ELINDÍTVA: {System.Threading.Thread.CurrentThread.ManagedThreadId}");
+                await action();
+            }
+            finally
+            {
+                _logger.LogWarning($"ThreadID ami fog LEZÁRULNI: {System.Threading.Thread.CurrentThread.ManagedThreadId}");
+                gameLock.Release();
+            }
+        }
+        #endregion
     }
 }

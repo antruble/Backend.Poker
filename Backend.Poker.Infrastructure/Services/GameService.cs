@@ -11,7 +11,7 @@ using Backend.Poker.Domain.Services;
 using Backend.Poker.Domain.ValueObjects;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
-using static System.Collections.Specialized.BitVector32;
+using System.Runtime.CompilerServices;
 
 namespace Backend.Poker.Infrastructure.Services
 {
@@ -47,15 +47,24 @@ namespace Backend.Poker.Infrastructure.Services
 
         public async Task<Game> GetGameAsync()
         {
-            var games = await _unitOfWork.Games.GetAllAsync(filter: g => g.Status != GameStatus.Completed, includeProperties:"Players,CurrentHand");
+            try
+            {
+                var games = await _unitOfWork.Games.GetAllAsync(filter: g => g.Status != GameStatus.Completed, includeProperties: "Players,CurrentHand");
 
-            var game = 
-                games.ToList().OrderBy(g => g.Id).FirstOrDefault() 
-                ?? await StartNewGameAsync(5);
+                var game =
+                    games.ToList().OrderBy(g => g.Id).FirstOrDefault()
+                    ?? await StartNewGameAsync(5);
 
-            game.Players = [.. game.Players.OrderBy(p => p.Seat)];
+                game.Players = [.. game.Players.OrderBy(p => p.Seat)];
 
-            return game;
+                return game;
+            }
+            catch (Exception ex)
+            {
+
+                throw;
+            }
+            
         }
         public async Task<Game?> GetGameByIdAsync(Guid gameId)
         {
@@ -94,36 +103,39 @@ namespace Backend.Poker.Infrastructure.Services
             if (game.CurrentHand!.SkipActions)
                 throw new Exception($"Error.ProcessActionAsync: a skip actions nem kéne, hogy true legyen");
             
-            HandleAction(game, player, action);
-
-            // bezárölt kör -> vagy új kör, vagy vége a hand
-            if (game.IsNextPlayerPivot())
+            await HandleActionAsync(game, player, action);
+            if (game.CurrentGameAction != GameActions.ShowOff)
             {
-                // River utolsó embere a hand vége
-                if (game.CurrentHand!.HandStatus == HandStatus.River)
+                
+                // bezárölt kör -> vagy új kör, vagy vége a hand
+                if (game.IsNextPlayerPivot())
                 {
-                    await ProcessFinishedHandAsync(game);
+                    // River utolsó embere a hand vége
+                    if (game.CurrentHand!.HandStatus == HandStatus.River)
+                    {
+                        game.CurrentGameAction = GameActions.DealNextRound;
+                        //await ProcessFinishedHandAsync(game);
+                    }
+                    else // Még nem zárult be a hand, csak egy kör
+                    {
+                        _logger.LogInformation($"A következő játékos a pivot játékos, de még nincs river, ezért a körnek vége");
+                        game.CurrentHand.Pot.CompleteRound();
+                        game.Players
+                            .Where(p => p.PlayerStatus == PlayerStatus.AllIn)
+                            .ToList()
+                            .ForEach(p => p.HasToRevealCards = true);
+
+                        game.CurrentGameAction = GameActions.DealingCards;
+                        game = await DealNextRound(game);
+                    }
                 }
-                else // Még nem zárult be a hand, csak egy kör
+                else // még nem zárult be a kör
                 {
-                    _logger.LogInformation($"A következő játékos a pivot játékos, de még nincs river, ezért a körnek vége");
-                    game.CurrentHand.Pot.CompleteRound();
-
-                    game.Players
-                        .Where(p => p.PlayerStatus == PlayerStatus.AllIn)
-                        .ToList()
-                        .ForEach(p => p.HasToRevealCards = true);
-
-                    game.CurrentGameAction = GameActions.DealingCards;
-                    game = await DealNextRound(game);
+                    game.CurrentGameAction = GameActions.PlayerAction;
+                    game.SwitchToTheNextPlayer(lastPlayer: player);
                 }
+                _logger.LogInformation($"Átváltva a következő játékosra (ha nem hand vége volt)");
             }
-            else // még nem zárult be a kör
-            {
-                game.CurrentGameAction = GameActions.PlayerAction;
-                game.SwitchToTheNextPlayer(lastPlayer: player);
-            }
-            _logger.LogInformation($"Átváltva a következő játékosra (ha nem hand vége volt)");
 
             // Mentjük a változtatásokat
             await _unitOfWork.SaveChangesAsync();
@@ -178,17 +190,28 @@ namespace Backend.Poker.Infrastructure.Services
         }
         private async Task CompleteHandAndSaveWinnersAsync(Game game)
         {
-            var winners = game.CurrentHand!.CompleteHand(_handEvaluator, game.Players);
-            winners
-                .Join(game.Players,
-                      winner => winner.PlayerId,
-                      player => player.Id,
-                      (winner, player) => new { Winner = winner, Player = player })
-                .ToList()
-                .ForEach(x => x.Player.AddChips(x.Winner.Pot));
+            try
+            {
+                var winners = game.CurrentHand!.CompleteHand(_handEvaluator, game.Players);
+                winners
+                    .Join(game.Players,
+                          winner => winner.PlayerId,
+                          player => player.Id,
+                          (winner, player) => new { Winner = winner, Player = player })
+                    .ToList()
+                    .ForEach(x => x.Player.AddChips(x.Winner.Pot));
 
-            await _unitOfWork.Winners.AddRangeAsync(winners);
-            await _unitOfWork.Winners.SaveChangesAsync();
+                _logger.LogInformation($"Winners: {winners.ToString()}");
+                _logger.LogInformation($"WinnersCount: {winners.Count}");
+                await _unitOfWork.Winners.AddRangeAsync(winners.ToList());
+                await _unitOfWork.Winners.SaveChangesAsync();
+            }
+            catch (Exception ex)
+            {
+
+                throw;
+            }
+            
         }
 
         private async Task EliminateChiplessPlayersAsync(Game game)
@@ -248,12 +271,26 @@ namespace Backend.Poker.Infrastructure.Services
             return deck;
         }
 
-        private void HandleAction(Game game, Player player, PlayerAction action)
+        private async Task HandleActionAsync(Game game, Player player, PlayerAction action)
         {
             switch (action.ActionType)
             {
                 case PlayerActionType.Fold:
                     player.Fold(); //TODO: ha fold, és emiatt hand vége
+                    var activePlayerCount = game.Players.Count(p => p.PlayerStatus == PlayerStatus.Waiting);
+                    if (activePlayerCount < 2)
+                    {
+                        var nonFoldedPlayerCount = game.Players.Count(p => p.PlayerStatus == PlayerStatus.Waiting || p.PlayerStatus == PlayerStatus.AllIn);
+                        if (nonFoldedPlayerCount == 1)
+                        {
+                            await CompleteHandAndSaveWinnersAsync(game);
+                            game.CurrentGameAction = GameActions.ShowOff;
+                        }
+                        else if (nonFoldedPlayerCount > 1)
+                        {
+                            game.CurrentHand!.SkipActions = true;
+                        }
+                    }
                     break;
                 case PlayerActionType.Call:
                     HandleCallAction(game, player);

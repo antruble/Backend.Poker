@@ -144,26 +144,64 @@ namespace Backend.Poker.Domain.Entities
 
         public int GetActivePlayersCount() => Players.Count(p => p.PlayerStatus != PlayerStatus.Lost && p.PlayerStatus != PlayerStatus.Folded);
         public int GetWaitingPlayersCount() => Players.Count(p => p.PlayerStatus == PlayerStatus.Waiting);
+        //public bool IsNextPlayerPivot()
+        //{
+        //    try
+        //    {
+        //        var sortedPlayers = Players.OrderBy(p => p.Seat).ToList();
+
+        //        // Keressük meg a lastPlayer-t a rendezett listában
+        //        var lastPlayer = sortedPlayers.FirstOrDefault(p => p.Id == CurrentHand!.CurrentPlayerId)
+        //                         ?? throw new ArgumentException("A soron lévő játékos nincsen a playerek között");
+
+        //        Player? nextPlayer;
+
+        //        var maxSeat = sortedPlayers.Last().Seat;
+        //        for (int i = lastPlayer.Seat; i <= maxSeat; i++)
+        //        {
+        //            var nextSeat = (i + 1) % (maxSeat + 1);
+        //            nextPlayer = sortedPlayers.FirstOrDefault(p => p.Seat == nextSeat);
+        //            if (nextPlayer is null)
+        //                continue;
+        //            if (nextPlayer.Id == CurrentHand!.PivotPlayerId)
+        //                return true;
+        //            if (nextPlayer.PlayerStatus == PlayerStatus.Waiting)
+        //                return false;
+        //        }
+        //        throw new Exception("Nincs pivot játékos");
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        Console.WriteLine(ex.Message);
+        //        throw new Exception(ex.Message);
+        //    }
+        //}
         public bool IsNextPlayerPivot()
         {
-            // Rendezzük a játékosokat seat szerint növekvő sorrendbe
-            var sortedPlayers = Players.OrderBy(p => p.Seat).ToList();
-
-            // Keressük meg a lastPlayer-t a rendezett listában
-            var lastPlayer = sortedPlayers.FirstOrDefault(p => p.Id == CurrentHand!.CurrentPlayerId)
-                             ?? throw new ArgumentException("A soron lévő játékos nincsen a playerek között");
-
-            Player? nextPlayer;
-
-            for (int i = 1; i < Players.Count; i++)
+            try
             {
-                nextPlayer = sortedPlayers.First(p => p.Seat == (lastPlayer.Seat + i) % Players.Count);
-                if (nextPlayer.Id == CurrentHand!.PivotPlayerId)
-                    return true;
-                if (nextPlayer.PlayerStatus == PlayerStatus.Waiting)
-                    return false;
+                var sortedPlayers = Players.OrderBy(p => p.Seat).ToList();
+                int currentIndex = sortedPlayers.FindIndex(p => p.Id == CurrentHand!.CurrentPlayerId);
+                if (currentIndex == -1)
+                    throw new ArgumentException("A soron lévő játékos nincsen a playerek között");
+
+                // Iteráljunk körkörösen a listában az aktuális játékost követő elemtől
+                for (int offset = 1; offset < sortedPlayers.Count; offset++)
+                {
+                    int nextIndex = (currentIndex + offset) % sortedPlayers.Count;
+                    var candidate = sortedPlayers[nextIndex];
+                    if (candidate.Id == CurrentHand!.PivotPlayerId)
+                        return true;
+                    if (candidate.PlayerStatus == PlayerStatus.Waiting)
+                        return false;
+                }
+                throw new Exception("Nincs pivot játékos");
             }
-            throw new Exception("Nincs pivot játékos");
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+                throw new Exception(ex.Message);
+            }
         }
         public Guid SetRoundsFirstPlayerToCurrent()
         {
