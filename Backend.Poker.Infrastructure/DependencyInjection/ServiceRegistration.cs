@@ -25,12 +25,12 @@ namespace Backend.Poker.Infrastructure.DependencyInjection
            
             services.AddScoped<IUnitOfWork, UnitOfWork>();
 
-
-
             services.AddScoped<IBotService, BotService>();
             services.AddScoped<IPlayerService, PlayerService>();
             services.AddScoped<IPokerHandEvaluator, PokerHandEvaluator>();
             services.AddScoped<IGameService, GameService>();
+
+            services.AddDocumentSummaryServices(configuration);
 
         }
     }

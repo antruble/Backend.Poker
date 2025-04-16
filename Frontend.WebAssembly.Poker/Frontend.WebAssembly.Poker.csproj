@@ -8,6 +8,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Backend.Poker.Domain\Backend.Poker.Domain.csproj" />
+    <ProjectReference Include="..\Backend.Poker.Shared\Backend.Poker.Shared.csproj" />
   </ItemGroup>
 
   <ItemGroup>

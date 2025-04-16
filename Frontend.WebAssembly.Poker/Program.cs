@@ -29,6 +29,10 @@ builder.Services.AddHttpClient("PokerClient", client =>
 {
     client.BaseAddress = new Uri("https://localhost:7169/api/poker/");
 });
+builder.Services.AddHttpClient("DocumentSummaryClient", client =>
+{
+    client.BaseAddress = new Uri("https://localhost:7169/api/documentsummary/");
+});
 
 var app = builder.Build();
 

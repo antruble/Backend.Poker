@@ -1,0 +1,130 @@
+﻿@page "/"
+@using Microsoft.AspNetCore.Components.Forms
+@inject HttpClient Http
+
+<h3>Dokumentum összefoglaló</h3>
+
+<!-- Fájlfeltöltésre szolgáló modal -->
+@if (showUploadModal)
+{
+    <div class="modal fade show d-block" tabindex="-1" role="dialog" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-dialog-centered" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Fájl feltöltés</h5>
+                </div>
+                <div class="modal-body">
+                    <p>Válassza ki a feltöltendő dokumentumot!</p>
+                    <InputFile OnChange="OnFileSelected" />
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-primary" @onclick="StartUpload" disabled="@(selectedFile == null)">Feltöltés</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Feldolgozás közbeni loading jelzés -->
+@if (isProcessing)
+{
+    <div class="text-center my-4">
+        <div class="spinner-border" role="status">
+            <span class="visually-hidden">Feldolgozás...</span>
+        </div>
+        <p>Dokumentum feldolgozása, kérem várjon!</p>
+    </div>
+}
+
+<!-- Visszakapott dokumentum összefoglaló megjelenítése -->
+@if (documentSections != null && documentSections.Any())
+{
+    <div class="container my-4">
+        @foreach (var sec in documentSections)
+        {
+            <div class="card my-3">
+                <div class="card-header">
+                    @sec.Title
+                </div>
+                <div class="card-body">
+                    <p>@sec.Content</p>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    // Modal láthatóságának vezérlése, a komponens indulásakor látszik
+    private bool showUploadModal = true;
+
+    // Loading jelzés állapota
+    private bool isProcessing = false;
+
+    // Visszakapott dokumentum szekciók listája
+    private List<DocumentSection> documentSections;
+
+    // A kiválasztott fájl tárolása
+    private IBrowserFile selectedFile;
+
+    // InputFile komponens eseménykezelője, ahol eltároljuk a fájlt
+    private void OnFileSelected(InputFileChangeEventArgs e)
+    {
+        selectedFile = e.File;
+    }
+
+    // Feltöltés indítása a gomb megnyomásával
+    private async Task StartUpload()
+    {
+        // Amennyiben nincs fájl kiválasztva, nem csinálunk semmit
+        if (selectedFile == null)
+            return;
+
+        // A modal bezárása és a feldolgozás jelzése
+        showUploadModal = false;
+        isProcessing = true;
+
+        try
+        {
+            // Korlátozás: itt például 15 MB maximum, módosítsa igény szerint
+            var streamContent = new StreamContent(selectedFile.OpenReadStream(maxAllowedSize: 1024 * 1024 * 15));
+            streamContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(selectedFile.ContentType);
+
+            // MultipartFormDataContent létrehozása a fájl csomagolásához
+            var content = new MultipartFormDataContent
+            {
+                { streamContent, "file", selectedFile.Name }
+            };
+
+            // Feltöltés a backend-re (példa végpont: "/api/upload")
+            var response = await Http.PostAsync("/api/upload", content);
+            if (response.IsSuccessStatusCode)
+            {
+                // A backend JSON formátumban küldi vissza az adatokat,
+                // mely a DocumentSection objektumokat tartalmazó listára deszerializálható.
+                documentSections = await response.Content.ReadFromJsonAsync<List<DocumentSection>>();
+            }
+            else
+            {
+                // Hibakezelés: értesítse a felhasználót hibáról (például egy üzenet megjelenítésével)
+                Console.Error.WriteLine("A feltöltés sikertelen volt.");
+            }
+        }
+        catch (Exception ex)
+        {
+            // Hibakezelés: itt kezelheti a kivételeket, naplózás, üzenet megjelenítése stb.
+            Console.Error.WriteLine($"Hiba történt: {ex.Message}");
+        }
+        finally
+        {
+            isProcessing = false;
+        }
+    }
+
+    // Segédosztály, amely a dokumentum szekcióit írja le
+    public class DocumentSection
+    {
+        public string Title { get; set; }
+        public string Content { get; set; }
+    }
+}

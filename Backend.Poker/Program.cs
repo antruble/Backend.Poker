@@ -27,7 +27,7 @@ builder.Services.AddOpenApi();
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend",
-        policy => policy.WithOrigins("https://localhost:7177") //  A Blazor WebAssembly URL-je
+        policy => policy.WithOrigins("https://localhost:7258") //  A Blazor WebAssembly URL-je
                         .AllowAnyMethod()
                         .AllowAnyHeader());
 });

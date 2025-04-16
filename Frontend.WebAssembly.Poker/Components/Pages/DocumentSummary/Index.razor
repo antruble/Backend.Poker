@@ -1,0 +1,124 @@
+﻿@page "/documentsummary/"
+@rendermode InteractiveServer
+@using Backend.Poker.Shared.Models.DocumentSummary
+@using Microsoft.AspNetCore.Components.Forms
+@* @inject HttpClient Http *@
+@inject IHttpClientFactory HttpFactory
+
+<div class="h-100 w-100">
+
+    <h3>Dokumentum összefoglaló</h3>
+
+    <!-- Fájlfeltöltésre szolgáló modal -->
+    @if (showUploadModal)
+    {
+        <div class="modal fade show d-block" tabindex="-1" role="dialog" style="background-color: rgba(0,0,0,0.5);">
+            <div class="modal-dialog modal-dialog-centered" role="document">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Fájl feltöltés</h5>
+                    </div>
+                    <div class="modal-body">
+                        <p>Válassza ki a feltöltendő dokumentumot!</p>
+                        <InputFile OnChange="OnFileSelected" />
+                    </div>
+                    <div class="modal-footer">
+                        <button class="btn btn-primary" @onclick="StartUpload" disabled="@(selectedFile == null)">Feltöltés</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- Feldolgozás közbeni loading jelzés -->
+    @if (isProcessing)
+    {
+        <div class="text-center my-4">
+            <div class="spinner-border" role="status">
+                <span class="visually-hidden">Feldolgozás...</span>
+            </div>
+            <p>Dokumentum feldolgozása, kérem várjon!</p>
+        </div>
+    }
+    @if (aiResponse != null)
+    {
+        <div class="container">
+            <h5>Rövid összegzés</h5>
+            <p>@aiResponse.ShortSummary</p>
+
+            <h5>Részletes összegzés</h5>
+            <p>@aiResponse.DetailedSummary</p>
+        </div>
+    }
+</div>
+
+@code {
+    private bool showUploadModal = true;
+    private bool isProcessing = false;
+    private DocumentSummaryApiResult? aiResponse;
+    
+    private IBrowserFile? selectedFile;
+
+    HttpClient? _http;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _http = HttpFactory.CreateClient("DocumentSummaryClient");
+    }
+    // InputFile komponens eseménykezelője, ahol eltároljuk a fájlt
+    private async Task OnFileSelected(InputFileChangeEventArgs e)
+    {
+        selectedFile = e.File;
+    }
+
+    // Feltöltés indítása a gomb megnyomásával
+    private async Task StartUpload()
+    {
+        // Amennyiben nincs fájl kiválasztva, nem csinálunk semmit
+        if (selectedFile == null)
+            return;
+
+        // A modal bezárása és a feldolgozás jelzése
+        showUploadModal = false;
+        isProcessing = true;
+
+        try
+        {
+            // Korlátozás: itt például 15 MB maximum, módosítsa igény szerint
+            var streamContent = new StreamContent(selectedFile.OpenReadStream(maxAllowedSize: 1024 * 1024 * 15));
+            streamContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(selectedFile.ContentType);
+
+            // MultipartFormDataContent létrehozása a fájl csomagolásához
+            var content = new MultipartFormDataContent
+            {
+                { streamContent, "file", selectedFile.Name }
+            };
+
+            var response = await _http!.PostAsync("upload", content);
+            if (response.IsSuccessStatusCode)
+            {
+                aiResponse = await response.Content.ReadFromJsonAsync<DocumentSummaryApiResult>();
+            }
+            else
+            {
+                Console.Error.WriteLine("A feltöltés sikertelen volt.");
+            }
+        }
+        catch (Exception ex)
+        {
+            // Hibakezelés: itt kezelheti a kivételeket, naplózás, üzenet megjelenítése stb.
+            Console.Error.WriteLine($"Hiba történt: {ex.Message}");
+        }
+        finally
+        {
+            isProcessing = false;
+        }
+    }
+
+    // Segédosztály, amely a dokumentum szekcióit írja le
+    public class DocumentSection
+    {
+        public string Title { get; set; }
+        public string Content { get; set; }
+    }
+}

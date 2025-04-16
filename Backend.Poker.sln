@@ -13,6 +13,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Backend.Poker.Infrastructur
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Frontend.WebAssembly.Poker", "Frontend.WebAssembly.Poker\Frontend.WebAssembly.Poker.csproj", "{9EAE31C3-4B64-487F-ACD5-3F8300AC7F6D}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Backend.Poker.Shared", "Backend.Poker.Shared\Backend.Poker.Shared.csproj", "{98EC376A-0980-40C5-94B3-A3D41EDCDB98}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -39,6 +41,10 @@ Global
 		{9EAE31C3-4B64-487F-ACD5-3F8300AC7F6D}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{9EAE31C3-4B64-487F-ACD5-3F8300AC7F6D}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{9EAE31C3-4B64-487F-ACD5-3F8300AC7F6D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{98EC376A-0980-40C5-94B3-A3D41EDCDB98}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{98EC376A-0980-40C5-94B3-A3D41EDCDB98}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{98EC376A-0980-40C5-94B3-A3D41EDCDB98}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{98EC376A-0980-40C5-94B3-A3D41EDCDB98}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
