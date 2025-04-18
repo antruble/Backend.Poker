@@ -18,7 +18,7 @@ namespace Backend.Poker.Controllers
         }
 
         [HttpPost("upload")]
-        public async Task<IActionResult> Upload(IFormFile file)
+        public async Task<IActionResult> Upload(IFormFile file, [FromForm] string style)
         {
             if (file == null || file.Length == 0)
             {
@@ -34,8 +34,8 @@ namespace Backend.Poker.Controllers
 
             // A fájl szöveges tartalmát a service segítségével nyerjük ki
             var extractedText = await _documentSummaryService.ExtractTextAsync(file);
-            var apiResponse = await _openAiClient.GetSummaryAsync(extractedText);
-            
+            var apiResponse = await _openAiClient.GetSummaryAsync(extractedText, style);
+
 
             return Ok(apiResponse);
         }

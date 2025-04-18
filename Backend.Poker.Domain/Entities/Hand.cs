@@ -32,6 +32,9 @@ namespace Backend.Poker.Domain.Entities
         public bool SkipActions { get; set; } = false;
 
         [NotMapped]
+        public Dictionary<Guid, double> Odds { get; set; }
+
+        [NotMapped]
         [JsonIgnore]
         public Deck Deck { get; private set; }
 
@@ -48,9 +51,9 @@ namespace Backend.Poker.Domain.Entities
         }
 
         [JsonConstructor]
-        public Hand(Guid id, List<Card> communityCards, HandStatus handStatus, Pot pot, bool skipActions)
+        public Hand(Guid id, List<Card> communityCards, HandStatus handStatus, Pot pot, bool skipActions, Dictionary<Guid, double> odds)
         {
-            (Id, CommunityCards, HandStatus, Pot, SkipActions) = (id, communityCards, handStatus, pot, SkipActions);
+            (Id, CommunityCards, HandStatus, Pot, SkipActions, Odds) = (id, communityCards, handStatus, pot, skipActions, odds);
         }
 
         public void DealHoleCards(IList<Player> players)

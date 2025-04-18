@@ -1,4 +1,5 @@
 ﻿using Backend.Poker.Application.Interfaces;
+using Backend.Poker.Application.Services.Poker;
 using Backend.Poker.Domain.IRepositories;
 using Backend.Poker.Domain.Services;
 using Backend.Poker.Infrastructure.Data;
@@ -28,9 +29,13 @@ namespace Backend.Poker.Infrastructure.DependencyInjection
             services.AddScoped<IBotService, BotService>();
             services.AddScoped<IPlayerService, PlayerService>();
             services.AddScoped<IPokerHandEvaluator, PokerHandEvaluator>();
+            services.AddSingleton<IHandRankEvaluator, PokerHandEvaluator>();
+            services.AddSingleton<IOddsCalculator, MonteCarloOddsCalculator>();
+
             services.AddScoped<IGameService, GameService>();
 
             services.AddDocumentSummaryServices(configuration);
+            services.AddRecipesServices(configuration);
 
         }
     }

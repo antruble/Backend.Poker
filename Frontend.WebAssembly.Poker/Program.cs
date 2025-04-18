@@ -33,6 +33,10 @@ builder.Services.AddHttpClient("DocumentSummaryClient", client =>
 {
     client.BaseAddress = new Uri("https://localhost:7169/api/documentsummary/");
 });
+builder.Services.AddHttpClient("RecipesClient", client =>
+{
+    client.BaseAddress = new Uri("https://localhost:7169/api/recipes/");
+});
 
 var app = builder.Build();
 

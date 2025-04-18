@@ -1,221 +1,150 @@
-﻿@page "/poker"
-@using Frontend.WebAssembly.Poker.Engine
-@using Frontend.WebAssembly.Poker.Services
-
+﻿@using Frontend.WebAssembly.Poker.Components.Layout
+@page "/"
+@layout SecondaryLayout
 @rendermode InteractiveServer
-@inject GameStateService GameState
-@inject IHttpClientFactory HttpFactory
-@inject ILoggerFactory LoggerFactory
-@inject ILogger<Home> Logger
+@inject NavigationManager NavigationManager
 
-@if (isLoading)
-{
-    <p class="text-center">Betöltés...</p>
-}
-else if (hasError)
-{
-    <p class="text-center text-danger">Hiba történt a játék betöltése során.</p>
-}
-else if (_engine is null || GameState.CurrentGame is null)
-{
-    <h1 class="text-center text-red">Nincs megjeleníthető játék.</h1>
-}
-else
-{
-    {
-        <!-- Játékinfo panel -->
-        <div class="container">
-            @if (GameState.CurrentGame.CurrentHand is not null)
-            {
-                <h1>Pot: @GameState.CurrentGame.CurrentHand.Pot.MainPot</h1>
-                <!-- Poker asztal -->
-                <div class="poker-table">
-                    <!-- Közösségi lapok -->
-                    <div class="community-cards">
-                        @if (GameState.CurrentGame.CurrentHand.CommunityCards.Any())
-                        {
-                            @foreach (var card in GameState.CurrentGame.CurrentHand.CommunityCards)
-                            {
-                                <div class="card @card.Suit.ToString().ToLower()">
-                                    <div class="rank">@card.DisplayValue</div>
-                                    <div class="suit">@GetSuitSymbol(card.Suit)</div>
-                                </div>
-                            }
-                        }
-                    </div>
+<style>
+    .carousel-container {
+    position: relative;
+    width: 100%;
+    height: 60vh;
+    overflow: hidden;
+    border-top: 3px solid white;
+    border-bottom: 3px solid white;
+    }
 
-                    <!-- Dealer -->
-                    <div class="seat-dealer">
-                        <strong>Dealer</strong>
-                    </div>
+    .carousel-wrapper {
+        transition: background-color 0.7s ease-in-out;
+    }
 
-                    <!-- Játékos ülések -->
-                    @if (GameState.CurrentGame.Players is not null)
-                    {
-                        @foreach (var player in GameState.CurrentGame.Players)
-                        {
-                            string cssClasses = string.Empty;
-                            // Ha van nyertes, és a jelenlegi játékos az az, akkor jelenítsük meg
-                            if (GameState.CurrentGame.CurrentGameAction == GameActions.ShowOff 
-                                && GameState.Winners != null
-                                && GameState.Winners.Any(w => w.PlayerId == player.Id))
-                            {
-                                cssClasses += "bg-warning ";
-                            }
-                            // Ha játékos action következik és a jelenlegi játékos a soron következő, akkor jelenítsük meg
-                            if (GameState.CurrentGame.CurrentGameAction == GameActions.PlayerAction 
-                                && player.Id == GameState.CurrentGame.GetCurrentPlayersId())
-                            {
-                                cssClasses += "border border-primary bg-success ";
-                            }
+    .carousel-slide {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-size: cover;
+        background-position: center;
+        transition: opacity 0.7s ease-in-out;
+    }
 
-                            // Játékos komponens:
-                            <div class="player-seat seat-@player.Seat @cssClasses">
-                                @if (GameState.CurrentGame.CurrentHand.PivotPlayerId == player.Id)
-                                {
-                                    <strong>PIVOT</strong>
-                                }
-                                <strong>@player.Name</strong>
-                                <div>@player.Chips chips</div>
+    .carousel-slide.inactive {
+    opacity: 0;
+    pointer-events: none;
+    }
 
-                                @if (player.BlindStatus == BlindStatus.SmallBlind)
-                                {
-                                    <div>Kis VAK</div>
-                                }
-                                else if (player.BlindStatus == BlindStatus.BigBlind)
-                                {
-                                    <div>Nagy VAK</div>
-                                }
-                                @if (player.PlayerStatus != PlayerStatus.Folded)
-                                {
-                                    <div class="player-cards">
+    .carousel-slide.active {
+    opacity: 1;
+    }
 
-                                        @if (GameState.CurrentGame.CurrentGameAction == GameActions.ShowOff
-                                           || _engine.GetUserId() == player.Id || player.HasToRevealCards)
-                                        {
-                                            @foreach (var card in player.HoleCards)
-                                            {
-                                                <div class="card @card.Suit.ToString().ToLower()">
-                                                    <div class="rank">@card.DisplayValue</div>
-                                                    <div class="suit">@GetSuitSymbol(card.Suit)</div>
-                                                </div>
-                                            }
-                                        }
-                                        else
-                                        {
-                                            for (int i = 0; i < 2; i++)
-                                            {
-                                                <div class="card back">
-                                                </div>
-                                            }    
-                                        }
-                                    </div>
-                                }
-                            </div>
-                        }
-                    }
+    .carousel-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.4);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    padding: 1rem;
+    color: #fff;
+    }
+
+    .carousel-overlay h2 {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.7);
+    }
+
+    .carousel-overlay button {
+    font-size: 1.25rem;
+    padding: 0.75rem 1.5rem;
+    }
+
+    .carousel-controls {
+    position: absolute;
+    bottom: 20px;
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    padding: 0 20px;
+    z-index: 10;
+    }
+
+    .carousel-controls button {
+    background: rgba(255,255,255,0.7);
+    border: none;
+    color: #333;
+    padding: 0.5rem 1rem;
+    cursor: pointer;
+    border-radius: 0.25rem;
+    transition: background 0.3s;
+    }
+
+    .carousel-controls button:hover {
+    background: rgba(255,255,255,0.9);
+    }
+</style>
+
+<div class="d-flex justify-content-center align-items-center carousel-wrapper" style="height: 100vh; background: @BgStyle;">
+    <div class="carousel-container ">
+        @foreach (var i in Enumerable.Range(0, Slides.Count))
+        {
+            var slide = Slides[i];
+            <div class="carousel-slide @(i == ActiveIndex ? "active" : "inactive")"
+            style="background-image: url('@slide.BackgroundImageUrl')">
+                <div class="carousel-overlay">
+                    <h2>@slide.Title</h2>
+                    <button class="btn btn-primary" @onclick="() => NavigateTo(slide.Url)">
+                        @slide.ButtonText
+                    </button>
                 </div>
+            </div>
+        }
 
-                @if (GameState.CurrentGame.CurrentGameAction == GameActions.PlayerAction && _engine.GetUserId() == _engine.GetCurrentPlayersId())
-                {
-                    <!-- Action toolbar: játékos akciógombok -->
-                    <div class="action-toolbar-container">
-                        <div class="action-toolbar shadow">
-                            <button class="btn btn-danger action-btn" @onclick="Fold">Fold</button>
-                            <button class="btn btn-primary action-btn" @onclick="Call">Call</button>
-                            <div class="raise-container">
-                                <label for="raiseRange" class="raise-label">Raise: @raiseAmount</label>
-                                <input id="raiseRange" type="range" min="0" max="@MaxRaise" @bind="raiseAmount" class="raise-slider" />
-                                <button class="btn btn-success action-btn" @onclick="() => Raise(raiseAmount)">Raise</button>
-                            </div>
-                        </div>
-                    </div>
-                }
-
-
-                <!-- Bot akciók visszajelzése -->
-                @* <div class="text-center mt-3">
-                <p><strong>Bot Akció:</strong> @game.CurrentHand.</p>
-            </div> *@
-            }
-            else
-            {
-                <div>Betöltés..</div>
-            }
+        <div class="carousel-controls">
+            <button @onclick="Prev">&laquo; Előző</button>
+            <button @onclick="Next">Következő &raquo;</button>
         </div>
-    }
-
-}
-
-
+    </div>
+</div>
 @code {
-
-    private bool isLoading = true;
-    private bool hasError = false;
-
-    private PokerGameEngine? _engine;
-
-    private int raiseAmount = 0;
-    private int MaxRaise
+    private string BgStyle = string.Empty;
+    private int ActiveIndex = 0;
+    private List<Slide> Slides = new()
     {
-        get
-        {
-            var player = GameState.CurrentGame?.Players?.FirstOrDefault(p => p.Id == _engine.GetUserId());
-            return player?.Chips ?? 0;
-        }
+        new Slide("Póker játék", "poker", "Irány a játék", "images/pokerbg.jpg", "linear-gradient(90deg,rgba(25, 135, 84, 1) 0%, rgba(20, 108, 67, 1) 48%, rgba(10, 54, 34, 1) 100%)"),
+        new Slide("Dokumentum Összefoglaló", "documentsummary", "Foglaljuk össze", "images/documentsummary.jpg", "linear-gradient(90deg,rgba(207, 226, 255, 1) 1%, rgba(158, 197, 254, 1) 47%, rgba(52, 58, 64, 1) 100%)"),
+        new Slide("Receptek", "recipes", "Nézzük a recepteket", "images/recipes.jpg", "linear-gradient(90deg,rgba(255, 230, 156, 1) 1%, rgba(255, 218, 106, 1) 47%, rgba(102, 77, 3, 1) 100%)")
+    };
+    protected override void OnInitialized()
+    {
+        // Alaphelyzetben az első slide színe
+        BgStyle = Slides[ActiveIndex].BackgroundColor;
     }
 
-    #region Player actions methods
-    private void Fold() => _engine!.RecordPlayerAction(new PlayerAction(PlayerActionType.Fold, null));
-    private void Call() => _engine!.RecordPlayerAction(new PlayerAction(PlayerActionType.Call, null));
-    private void Raise(int amount) => _engine!.RecordPlayerAction(new PlayerAction(PlayerActionType.Raise, amount));
-    #endregion
-
-    protected override async Task OnInitializedAsync()
+    private void Prev()
     {
-        Logger.LogInformation("Kliens elindítva");
-        try
-        {
-            GameState.OnChange += RefreshUI;
-            await StartGameEngineAsync();
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error a game inicializálása közben: {ex.Message}");
-            hasError = true;
-        }
+        ActiveIndex = (ActiveIndex + Slides.Count - 1) % Slides.Count;
+        ChangeBgColor(Slides[ActiveIndex].BackgroundColor);
     }
 
-    private async Task StartGameEngineAsync()
+    private void Next()
     {
-        var engineLogger = LoggerFactory.CreateLogger<PokerGameEngine>();
-        _engine = new PokerGameEngine(HttpFactory, engineLogger, StateHasChanged, GameState);
-        await _engine.InitAsync(CancellationToken.None);
-        _engine.Start();
-        isLoading = false;
+        ActiveIndex = (ActiveIndex + 1) % Slides.Count;
+        ChangeBgColor(Slides[ActiveIndex].BackgroundColor);
     }
 
+    private void NavigateTo(string url) => NavigationManager.NavigateTo(url);
 
-    private async Task<Game> GetGameAsync(HttpClient http) => 
-        await http.GetFromJsonAsync<Game>("getgame")
-        ?? throw new InvalidOperationException("A 'games' API nem adott vissza játékot.");
-
-    private async void RefreshUI()
-    {
-        await InvokeAsync(StateHasChanged);
+    private void ChangeBgColor(string color)
+    { 
+        BgStyle = color;
+        StateHasChanged();
     }
-
-    private string GetSuitSymbol(Suit suit) =>
-        suit switch
-        {
-            Suit.Clubs => "♣",
-            Suit.Diamonds => "♦",
-            Suit.Hearts => "♥",
-            Suit.Spades => "♠",
-            _ => ""
-        };
-    
-
-
-    public void Dispose() => GameState.OnChange -= RefreshUI;
+    private record Slide(string Title, string Url, string ButtonText, string BackgroundImageUrl, string BackgroundColor);
 }

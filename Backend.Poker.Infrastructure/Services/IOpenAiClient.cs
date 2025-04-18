@@ -14,6 +14,6 @@ namespace Backend.Poker.Infrastructure.Services
         /// </summary>
         /// <param name="text">A dokumentum tartalma, amit feldolgozni szeretnél</param>
         /// <returns>Az AI válasza</returns>
-        Task<DocumentSummaryApiResult> GetSummaryAsync(string text);
+        Task<DocumentSummaryApiResult> GetSummaryAsync(string text, string style);
     }
 }

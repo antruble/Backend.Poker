@@ -22,7 +22,7 @@ namespace Backend.Poker.Application.Services
 
             if (extension == ".txt")
             {
-                // TXT esetén egyszerű szövegfájl beolvasás
+                // TXT esetén simple szövegfájl beolvasás
                 using (var stream = file.OpenReadStream())
                 using (var reader = new StreamReader(stream))
                 {

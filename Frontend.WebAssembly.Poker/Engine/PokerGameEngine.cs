@@ -192,7 +192,7 @@ namespace Frontend.WebAssembly.Poker.Engine
                         var winners = await http.GetFromJsonAsync<ICollection<Winner>>($"getwinners?handid={_game.CurrentHand.Id}") ?? throw new Exception();
                         _gameStateService.SetWinners(winners);
                         _logger.LogInformation($"Vége a handnek, a nyertesek: {string.Join(", ", winners!.Select(p => p.Player.Name))}");
-                        await Task.Delay((int)(SPEED * 4000), token);
+                        await Task.Delay((int)(1 * 4000), token);
                         await http.PostAsync($"startnewhand?gameId={_game.Id}", null, token);
                         break;
                     default:
@@ -263,7 +263,7 @@ namespace Frontend.WebAssembly.Poker.Engine
                     _playerActionTcs = new TaskCompletionSource<PlayerAction>();
 
                 _logger.LogWarning("1.2 Várakozás elkezdve...");
-                // Egyszerű 30 másodperces timeout task
+                // simple 30 másodperces timeout task
                 var timeoutTask = Task.Delay(TimeSpan.FromSeconds(30), token);
 
                 // Várunk arra, hogy vagy a játékos akciója, vagy a timeout task befejeződjön

@@ -20,13 +20,20 @@ namespace Backend.Poker.Domain.Services
         /// <returns>A showdown eredménye</returns>
         IList<Winner> Evaluate(Hand hand, IList<Player> players);
     }
-
     /// <summary>
-    /// Egyszerűsített implementáció a Texas Hold’em showdown értékeléséhez.
+    /// Kiszámolja egy adott játékos hole + community kártyáiból
+    /// a legjobb 5‑kártyás kéz rangját (PokerHandRank).
+    /// </summary>
+    public interface IHandRankEvaluator
+    {
+        PokerHandRank EvaluateRank(IEnumerable<Card> holeCards, IEnumerable<Card> communityCards);
+    }
+    /// <summary>
+    /// simplesített implementáció a Texas Hold’em showdown értékeléséhez.
     /// Megjegyzés: A valós értékelési logika sokkal összetettebb,
     /// ez csak egy struktúrális példa.
     /// </summary>
-    public class PokerHandEvaluator : IPokerHandEvaluator
+    public class PokerHandEvaluator : IPokerHandEvaluator, IHandRankEvaluator
     {
         public IList<Winner> Evaluate(Hand hand, IList<Player> players)
         {
@@ -134,56 +141,23 @@ namespace Backend.Poker.Domain.Services
 
             return winners;
         }
-
-        //public IList<Winner> Evaluate(Hand hand, IList<Player> players)
-        //{
-        //    // Ellenőrizzük, hogy legalább 5 közös lap van
-        //    if (hand.CommunityCards.Count < 5)
-        //        throw new InvalidOperationException("Showdown nem hajtható végre: nem teljes a kéz (kevesebb mint 5 közös lap).");
-
-        //    Dictionary<Guid, PokerHandRank> bestRanks = new Dictionary<Guid, PokerHandRank>();
-
-        //    foreach (var player in players)
-        //    {
-        //        var allCards = player.HoleCards.Concat(hand.CommunityCards).ToList();
-        //        var combinations = GetAll5CardCombinations(allCards); // 21 kombináció
-
-        //        PokerHandRank? bestRankForPlayer = null;
-        //        foreach (var combo in combinations)
-        //        {
-        //            var rank = EvaluateCombo(combo);
-        //            if (bestRankForPlayer == null || rank.CompareTo(bestRankForPlayer) > 0)
-        //                bestRankForPlayer = rank;
-        //        }
-        //        bestRanks[player.Id] = bestRankForPlayer;
-        //    }
-
-        //    // Összehasonlítjuk a játékosok legjobb kezeit
-        //    var bestOverall = bestRanks.Values.Max(); // A legmagasabb értékű rank
-        //    var winners = bestRanks.Where(kvp => kvp.Value.CompareTo(bestOverall) == 0)
-        //                           .Select(kvp => kvp.Key)
-        //                           .ToList();
-
-        //    // Pot felosztás: egyenlő arányban osztjuk el a potot a győztesek között
-        //    decimal allocationPerWinner = hand.Pot / winners.Count;
-
-        //    // Létrehozunk egy Winner listát, amely tartalmazza az egyes győztesek azonosítóját és a hozzárendelt potot
-        //    var winnerList = winners.Select(w => new Winner
-        //    {
-        //        HandId = hand.Id,
-        //        PlayerId = w,
-        //        Player = players.First(p => p.Id == w),
-        //        Pot = allocationPerWinner
-        //    }).ToList();
-
-        //    return winnerList;
-        //}
-
+        public PokerHandRank EvaluateRank(IEnumerable<Card> holeCards, IEnumerable<Card> communityCards)
+        {
+            var allCards = holeCards.Concat(communityCards).ToList();
+            var combos = GetAll5CardCombinations(allCards);
+            PokerHandRank best = null!;
+            foreach (var c in combos)
+            {
+                var rank = EvaluateCombo(c);
+                if (best == null || rank.CompareTo(best) > 0)
+                    best = rank;
+            }
+            return best;
+        }
         private static IEnumerable<List<Card>> GetAll5CardCombinations(List<Card> cards)
         {
             return GetCombinations(cards, 5);
         }
-
         private static IEnumerable<List<Card>> GetCombinations(List<Card> cards, int k)
         {
             // Rekurzív kombinációgenerátor:
@@ -350,6 +324,5 @@ namespace Backend.Poker.Domain.Services
             }
             return false;
         }
-
     }
 }

@@ -20,6 +20,7 @@ namespace Backend.Poker.Infrastructure.Services
         private readonly IUnitOfWork _unitOfWork;
         private readonly IPlayerService _playerService;
         private readonly IPokerHandEvaluator _handEvaluator;
+        private readonly IOddsCalculator _oddsCalculator;
         private readonly ILogger<GameService> _logger;
         //private readonly IDomainEventPublisherService _eventPublisherService;
 
@@ -30,6 +31,7 @@ namespace Backend.Poker.Infrastructure.Services
             IUnitOfWork unitOfWork,
             IPlayerService playerService,
             IPokerHandEvaluator handEvaluator,
+            IOddsCalculator oddsCalculator,
             ILogger<GameService> logger,
 
             IMemoryCache cache
@@ -39,6 +41,7 @@ namespace Backend.Poker.Infrastructure.Services
             _unitOfWork = unitOfWork;
             _playerService = playerService;
             _handEvaluator = handEvaluator;
+            _oddsCalculator = oddsCalculator;
             _logger = logger;
 
             _cache = cache;
@@ -119,6 +122,16 @@ namespace Backend.Poker.Infrastructure.Services
                     else // Még nem zárult be a hand, csak egy kör
                     {
                         _logger.LogInformation($"A következő játékos a pivot játékos, de még nincs river, ezért a körnek vége");
+                        // 1) Hole és community kártyák kigyűjtése
+                        var hole = game.Players.ToDictionary(p => p.Id, p => (IList<Card>)p.HoleCards);
+                        var community = game.CurrentHand.CommunityCards;
+                        
+                        // 2) Odds számolása és mentése
+                        var odds = _oddsCalculator.CalculateWinProbabilities(hole, community);
+                        game.CurrentHand.Odds = odds;
+
+                        _logger.LogInformation("Kör végi odds-értékek elmentve.");
+
                         game.CurrentHand.Pot.CompleteRound();
                         game.Players
                             .Where(p => p.PlayerStatus == PlayerStatus.AllIn)

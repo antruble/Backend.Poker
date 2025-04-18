@@ -2,52 +2,76 @@
 @rendermode InteractiveServer
 @using Backend.Poker.Shared.Models.DocumentSummary
 @using Microsoft.AspNetCore.Components.Forms
-@* @inject HttpClient Http *@
 @inject IHttpClientFactory HttpFactory
 
-<div class="h-100 w-100">
+<div class="container py-5">
+    <h3 class="mb-4 text-center">Dokumentum összefoglaló</h3>
 
-    <h3>Dokumentum összefoglaló</h3>
-
-    <!-- Fájlfeltöltésre szolgáló modal -->
     @if (showUploadModal)
     {
-        <div class="modal fade show d-block" tabindex="-1" role="dialog" style="background-color: rgba(0,0,0,0.5);">
+        <div id="fileUploadModal" class="modal fade show d-block" tabindex="-1" role="dialog" style="background-color: rgba(0,0,0,0.5);">
             <div class="modal-dialog modal-dialog-centered" role="document">
-                <div class="modal-content">
-                    <div class="modal-header">
+                <div class="modal-content border-0 shadow-lg">
+                    <div class="modal-header bg-primary text-white">
                         <h5 class="modal-title">Fájl feltöltés</h5>
+                        <button type="button" class="btn-close" aria-label="Close" @onclick="() => showUploadModal = false"></button>
                     </div>
                     <div class="modal-body">
-                        <p>Válassza ki a feltöltendő dokumentumot!</p>
-                        <InputFile OnChange="OnFileSelected" />
+                        <div class="mb-4">
+                            <p class="mb-2">Válassza ki a feltöltendő dokumentumot:</p>
+                            <InputFile OnChange="OnFileSelected" class="form-control" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label"><strong>Válassza ki a kívánt stílust:</strong></label>
+                            <div class="btn-group d-flex" role="group">
+                                @foreach (var style in availableStyles)
+                                {
+                                    <button type="button" class="btn @(selectedStyle == style ? "btn-primary" : "btn-outline-primary") flex-fill"
+                                    @onclick="() => selectedStyle = style">
+                                        @style.ToUpper()
+                                    </button>
+                                }
+                            </div>
+                        </div>
                     </div>
                     <div class="modal-footer">
-                        <button class="btn btn-primary" @onclick="StartUpload" disabled="@(selectedFile == null)">Feltöltés</button>
+                        <button class="btn btn-success w-100" @onclick="StartUpload" disabled="@(selectedFile == null)">
+                            Fájl feltöltése és összefoglalás indítása
+                        </button>
                     </div>
                 </div>
             </div>
         </div>
     }
 
-    <!-- Feldolgozás közbeni loading jelzés -->
     @if (isProcessing)
     {
-        <div class="text-center my-4">
-            <div class="spinner-border" role="status">
+        <div class="text-center my-5">
+            <div class="spinner-border text-primary" role="status" style="width: 4rem; height: 4rem;">
                 <span class="visually-hidden">Feldolgozás...</span>
             </div>
-            <p>Dokumentum feldolgozása, kérem várjon!</p>
+            <h5 class="mt-3">Dokumentum feldolgozása, kérem várjon...</h5>
         </div>
     }
+
     @if (aiResponse != null)
     {
-        <div class="container">
-            <h5>Rövid összegzés</h5>
-            <p>@aiResponse.ShortSummary</p>
-
-            <h5>Részletes összegzés</h5>
-            <p>@aiResponse.DetailedSummary</p>
+        <div class="container my-4">
+            <div class="d-flex justify-content-end mb-3">
+                <button class="btn btn-secondary" @onclick="() => showUploadModal = true">Új fájl feltöltése</button>
+            </div>
+            <div class="card shadow w-100 h-100">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="card-title mb-0">Összefoglaló - @renderedStyle stílusban</h5>
+                </div>
+                <div class="card-body">
+                    <h6 class="card-subtitle mb-3 text-muted">Rövid összegzés</h6>
+                    <p>@aiResponse.ShortSummary</p>
+                    <hr />
+                    <h6 class="card-subtitle mb-3 text-muted">Részletes összegzés</h6>
+                    <p>@aiResponse.DetailedSummary</p>
+                </div>
+            </div>
         </div>
     }
 </div>
@@ -56,7 +80,12 @@
     private bool showUploadModal = true;
     private bool isProcessing = false;
     private DocumentSummaryApiResult? aiResponse;
-    
+
+    private string[] availableStyles = { "academic", "practical", "simple" };
+
+    private string selectedStyle = "academic";
+    private string renderedStyle = "academic";
+
     private IBrowserFile? selectedFile;
 
     HttpClient? _http;
@@ -65,39 +94,36 @@
     {
         _http = HttpFactory.CreateClient("DocumentSummaryClient");
     }
-    // InputFile komponens eseménykezelője, ahol eltároljuk a fájlt
+
     private async Task OnFileSelected(InputFileChangeEventArgs e)
     {
         selectedFile = e.File;
     }
 
-    // Feltöltés indítása a gomb megnyomásával
     private async Task StartUpload()
     {
-        // Amennyiben nincs fájl kiválasztva, nem csinálunk semmit
         if (selectedFile == null)
             return;
 
-        // A modal bezárása és a feldolgozás jelzése
         showUploadModal = false;
         isProcessing = true;
 
         try
         {
-            // Korlátozás: itt például 15 MB maximum, módosítsa igény szerint
             var streamContent = new StreamContent(selectedFile.OpenReadStream(maxAllowedSize: 1024 * 1024 * 15));
             streamContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(selectedFile.ContentType);
 
-            // MultipartFormDataContent létrehozása a fájl csomagolásához
             var content = new MultipartFormDataContent
             {
-                { streamContent, "file", selectedFile.Name }
+                { streamContent, "file", selectedFile.Name },
+                { new StringContent(selectedStyle), "style" }
             };
 
             var response = await _http!.PostAsync("upload", content);
             if (response.IsSuccessStatusCode)
             {
                 aiResponse = await response.Content.ReadFromJsonAsync<DocumentSummaryApiResult>();
+                renderedStyle = selectedStyle;
             }
             else
             {
@@ -106,19 +132,11 @@
         }
         catch (Exception ex)
         {
-            // Hibakezelés: itt kezelheti a kivételeket, naplózás, üzenet megjelenítése stb.
             Console.Error.WriteLine($"Hiba történt: {ex.Message}");
         }
         finally
         {
             isProcessing = false;
         }
-    }
-
-    // Segédosztály, amely a dokumentum szekcióit írja le
-    public class DocumentSection
-    {
-        public string Title { get; set; }
-        public string Content { get; set; }
     }
 }
