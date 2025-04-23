@@ -1,0 +1,37 @@
+﻿@rendermode InteractiveServer
+
+<div class="action-toolbar-container">
+    <div class="action-toolbar shadow">
+        <button class="btn btn-danger action-btn" @onclick="() => OnFold.InvokeAsync()">Fold</button>
+        <button class="btn btn-primary action-btn" @onclick="() => OnCall.InvokeAsync()">Call</button>
+        <div class="raise-container">
+            <label for="raiseRange" class="raise-label">Raise: @raiseAmount</label>
+            <input id="raiseRange"
+                   type="range"
+                   min="0"
+                   max="@MaxRaise"
+                   @bind="raiseAmount"
+                   class="raise-slider" />
+            <button class="btn btn-success action-btn"
+                    @onclick="() => OnRaise.InvokeAsync(raiseAmount)">
+                Raise
+            </button>
+        </div>
+    </div>
+</div>
+
+@code {
+    private int raiseAmount = 0;
+
+    [Parameter, EditorRequired]
+    public EventCallback OnFold { get; set; }
+
+    [Parameter, EditorRequired]
+    public EventCallback OnCall { get; set; }
+
+    [Parameter, EditorRequired]
+    public EventCallback<int> OnRaise { get; set; }
+
+    [Parameter, EditorRequired]
+    public int MaxRaise { get; set; }
+}

@@ -1,7 +1,14 @@
 ﻿@inherits LayoutComponentBase
+@inject NavigationManager NavigationManager
+@* @rendermode InteractiveServer *@
 
 <div class="page">
-    <main class="d-flex justify-content-center align-items-center" style="height: 100vh">
+    <header class="layout-header">
+        <a href="/" class="return-button" @onclick="async () => await NavigateHome()">
+            <i class="fas fa-arrow-left"></i> Vissza
+        </a>
+    </header>
+    <main>
         @Body
     </main>
 </div>
@@ -11,3 +18,7 @@
     <a href="." class="reload">Reload</a>
     <span class="dismiss">🗙</span>
 </div>
+
+@code {
+    private async Task NavigateHome() => NavigationManager.NavigateTo("/");
+}

@@ -1,0 +1,24 @@
+﻿@rendermode InteractiveServer
+
+@using Backend.Poker.Domain.ValueObjects
+
+<div class="community-cards">
+    @if (Cards?.Any() == true)
+    {
+        @foreach (var card in Cards)
+        {
+            <div class="card @card.Suit.ToString().ToLower()">
+                <div class="rank">@card.DisplayValue</div>
+                <div class="suit">@GetSuitSymbol(card.Suit)</div>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public IEnumerable<Card> Cards { get; set; } = Enumerable.Empty<Card>();
+
+    [Parameter, EditorRequired]
+    public Func<Suit, string> GetSuitSymbol { get; set; } = _ => string.Empty;
+}

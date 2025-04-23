@@ -24,4 +24,8 @@
     <ProjectReference Include="..\Backend.Poker.Infrastructure\Backend.Poker.Infrastructure.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="DTOs\" />
+  </ItemGroup>
+
 </Project>

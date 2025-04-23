@@ -38,8 +38,9 @@ namespace Frontend.WebAssembly.Poker.Engine
         #endregion
 
         #region Ctor
-        public PokerGameEngine(IHttpClientFactory httpClientFactory, ILogger<PokerGameEngine> logger, Action stateHasChangedCallback, GameStateService gameStateService)
+        public PokerGameEngine(Game game, IHttpClientFactory httpClientFactory, ILogger<PokerGameEngine> logger, Action stateHasChangedCallback, GameStateService gameStateService)
         {
+            _game = game;
             _httpClientFactory = httpClientFactory;
             _logger = logger;
             _stateHasChangedCallback = stateHasChangedCallback;
@@ -54,11 +55,11 @@ namespace Frontend.WebAssembly.Poker.Engine
 
         public async Task InitAsync(CancellationToken token)
         {
-            var http = _httpClientFactory.CreateClient("PokerClient");
-            _game = await http.GetFromJsonAsync<Game>($"getgame", token)
-                    ?? throw new InvalidOperationException("A játék betöltése sikertelen.");
+            //var http = _httpClientFactory.CreateClient("PokerClient");
+            //_game = await http.GetFromJsonAsync<Game>($"getgame", token)
+            //        ?? throw new InvalidOperationException("A játék betöltése sikertelen.");
             UserId = GetUserId();
-        }
+        }   
 
         public void Start()
         {

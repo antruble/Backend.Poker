@@ -1,0 +1,89 @@
+﻿@page "/poker/game"
+@using Backend.Poker.Domain.Entities
+@using Frontend.WebAssembly.Poker.Components.Pages.Poker.Components
+@using Frontend.WebAssembly.Poker.Components.Layout
+@using Frontend.WebAssembly.Poker.Engine
+@using Frontend.WebAssembly.Poker.Services
+
+@rendermode InteractiveServer
+
+
+@inject GameStateService GameState
+@inject IHttpClientFactory HttpFactory
+@inject ILoggerFactory LoggerFactory
+@inject ILogger<Poker> Logger
+
+
+@if (isLoading) { <p class="text-center">Betöltés...</p> }
+else if (hasError) { <p class="text-center text-danger">Hiba történt a játék betöltése során.</p> }
+else if (_engine is null || GameState.CurrentGame is null) { <h1 class="text-center text-red">Nincs játék.</h1> }
+else
+{
+    <div class="d-flex justify-content-center align-items-center" style="height: 100vh">
+        <PokerTable
+        CurrentGame="GameState.CurrentGame"
+        UserId="_engine.GetUserId()"
+        Winners="GameState.Winners"
+        GetSuitSymbol="GetSuitSymbol" />
+
+        @if (GameState.CurrentGame.CurrentGameAction == GameActions.PlayerAction
+            && _engine.GetUserId() == GameState.CurrentGame.GetCurrentPlayersId())
+        {
+            <ActionToolbar
+            MaxRaise="MaxRaise"
+            OnFold="() => Fold()"
+            OnCall="() => Call()"
+            OnRaise="amt => Raise(amt)" />
+        }
+    </div>
+}
+
+@code {
+    private bool isLoading = true, hasError = false;
+    private PokerGameEngine? _engine;
+    private int MaxRaise => GameState.CurrentGame?
+                             .Players?
+                             .FirstOrDefault(p => p.Id == _engine?.GetUserId())?
+                             .Chips ?? 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        GameState.OnChange += RefreshUI;
+        await StartGameEngineAsync();
+    }
+    private void Fold() => _engine!.RecordPlayerAction(new PlayerAction(PlayerActionType.Fold, null));
+    private void Call() => _engine!.RecordPlayerAction(new PlayerAction(PlayerActionType.Call, null));
+    private void Raise(int amount) => _engine!.RecordPlayerAction(new PlayerAction(PlayerActionType.Raise, amount));
+
+    private async Task StartGameEngineAsync()
+    {
+        var engineLogger = LoggerFactory.CreateLogger<PokerGameEngine>();
+        if (GameState.CurrentGame is null)
+        {
+            throw new Exception("NULL");
+        }
+        _engine = new PokerGameEngine(GameState.CurrentGame, HttpFactory, engineLogger, StateHasChanged, GameState);
+        await _engine.InitAsync(CancellationToken.None);
+        _engine.Start();
+        isLoading = false;
+    }
+
+    private async void RefreshUI()
+    {
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private string GetSuitSymbol(Suit suit) =>
+        suit switch
+        {
+            Suit.Clubs => "♣",
+            Suit.Diamonds => "♦",
+            Suit.Hearts => "♥",
+            Suit.Spades => "♠",
+            _ => ""
+        };
+
+
+
+    public void Dispose() => GameState.OnChange -= RefreshUI;
+}

@@ -1,0 +1,89 @@
+﻿@rendermode InteractiveServer
+
+@using Backend.Poker.Domain.Entities
+@using Backend.Poker.Domain.ValueObjects
+
+<div class="player-seat seat-@Player.Seat @(CssClasses)">
+    @if (Player.Id == PivotPlayerId)
+    {
+        <strong>PIVOT</strong>
+    }
+    <strong>@Player.Name</strong>
+    <div>@Player.Chips chips</div>
+
+    @if (Player.BlindStatus == BlindStatus.SmallBlind)
+    {
+        <div>Kis VAK</div>
+    }
+    else if (Player.BlindStatus == BlindStatus.BigBlind)
+    {
+        <div>Nagy VAK</div>
+    }
+
+    @if (Player.PlayerStatus != PlayerStatus.Folded)
+    {
+        <div class="player-cards">
+            @if (CurrentGameAction == GameActions.ShowOff
+           || Player.Id == UserId
+           || Player.HasToRevealCards)
+            {
+                @foreach (var card in Player.HoleCards)
+                {
+                    <div class="card @card.Suit.ToString().ToLower()">
+                        <div class="rank">@card.DisplayValue</div>
+                        <div class="suit">@GetSuitSymbol(card.Suit)</div>
+                    </div>
+                }
+            }
+            else
+            {
+                @for (int i = 0; i < 2; i++)
+                {
+                    <div class="card back"></div>
+                }
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public Player Player { get; set; } = default!;
+
+    [Parameter, EditorRequired]
+    public GameActions CurrentGameAction { get; set; }
+
+    [Parameter, EditorRequired]
+    public Guid UserId { get; set; }
+
+    [Parameter]
+    public Guid? PivotPlayerId { get; set; }
+
+    [Parameter]
+    public IEnumerable<Winner>? Winners { get; set; }
+
+    [Parameter, EditorRequired]
+    public Func<Suit, string> GetSuitSymbol { get; set; } = _ => string.Empty;
+
+    private string CssClasses
+    {
+        get
+        {
+            var css = string.Empty;
+            if (CurrentGameAction == GameActions.ShowOff
+                && Winners?.Any(w => w.PlayerId == Player.Id) == true)
+            {
+                css += "bg-warning ";
+            }
+            if (CurrentGameAction == GameActions.PlayerAction
+                && Player.Id == CurrentPlayerId)
+            {
+                css += "border border-primary bg-success ";
+            }
+            return css;
+        }
+    }
+
+    [Parameter]
+    public Guid CurrentPlayerId { get; set; }
+}

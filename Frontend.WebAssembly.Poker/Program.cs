@@ -24,7 +24,7 @@ builder.Host.UseSerilog();
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
-builder.Services.AddScoped<GameStateService>();
+builder.Services.AddSingleton<GameStateService>();
 builder.Services.AddHttpClient("PokerClient", client =>
 {
     client.BaseAddress = new Uri("https://localhost:7169/api/poker/");

@@ -1,6 +1,6 @@
 ﻿using Backend.Poker.Application.Interfaces;
 using Backend.Poker.Domain.Entities;
-using Backend.Poker.DTOs;
+using Backend.Poker.Shared.Models.Poker;
 using Microsoft.AspNetCore.Mvc;
 using System.Collections.Concurrent;
 using System.Numerics;

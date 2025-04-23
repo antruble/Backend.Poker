@@ -1,0 +1,40 @@
+﻿@using Backend.Poker.Domain.Entities
+@using Backend.Poker.Domain.ValueObjects
+@using Frontend.WebAssembly.Poker.Components
+
+@rendermode InteractiveServer
+
+<div class="container">
+    <h1>Pot: @CurrentGame.CurrentHand?.Pot.MainPot</h1>
+
+    <div class="poker-table">
+        <CommunityCards Cards="CurrentGame.CurrentHand?.CommunityCards" GetSuitSymbol="GetSuitSymbol" />
+
+        <div class="seat-dealer"><strong>Dealer</strong></div>
+
+        @foreach (var player in CurrentGame.Players)
+        {
+            <PlayerSeat Player="player"
+                        UserId="UserId"
+                        CurrentGameAction="CurrentGame.CurrentGameAction"
+                        CurrentPlayerId="CurrentGame.GetCurrentPlayersId()"
+                        PivotPlayerId="CurrentGame.CurrentHand?.PivotPlayerId"
+                        Winners="Winners"
+                        GetSuitSymbol="GetSuitSymbol" />
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public Game CurrentGame { get; set; } = default!;
+
+    [Parameter, EditorRequired]
+    public Guid UserId { get; set; }
+
+    [Parameter]
+    public IEnumerable<Winner>? Winners { get; set; }
+
+    [Parameter, EditorRequired]
+    public Func<Suit, string> GetSuitSymbol { get; set; } = _ => string.Empty;
+}

@@ -1,221 +1,118 @@
 ﻿@page "/poker"
-@using Frontend.WebAssembly.Poker.Engine
+@using System.ComponentModel.DataAnnotations
+@using System.Net.Http.Json
+@using Backend.Poker.Domain.Entities
+@using Backend.Poker.Shared.Models.Poker
 @using Frontend.WebAssembly.Poker.Services
+@using Frontend.WebAssembly.Poker.Components.Layout
 
 @rendermode InteractiveServer
-@inject GameStateService GameState
+
 @inject IHttpClientFactory HttpFactory
-@inject ILoggerFactory LoggerFactory
-@inject ILogger<Home> Logger
+@inject GameStateService GameState
+@inject NavigationManager NavigationManager
+@* @layout SecondaryLayout *@
 
-@if (isLoading)
-{
-    <p class="text-center">Betöltés...</p>
-}
-else if (hasError)
-{
-    <p class="text-center text-danger">Hiba történt a játék betöltése során.</p>
-}
-else if (_engine is null || GameState.CurrentGame is null)
-{
-    <h1 class="text-center text-red">Nincs megjeleníthető játék.</h1>
-}
-else
-{
-    {
-        <!-- Játékinfo panel -->
-        <div class="container">
-            @if (GameState.CurrentGame.CurrentHand is not null)
-            {
-                <h1>Pot: @GameState.CurrentGame.CurrentHand.Pot.MainPot</h1>
-                <!-- Poker asztal -->
-                <div class="poker-table">
-                    <!-- Közösségi lapok -->
-                    <div class="community-cards">
-                        @if (GameState.CurrentGame.CurrentHand.CommunityCards.Any())
-                        {
-                            @foreach (var card in GameState.CurrentGame.CurrentHand.CommunityCards)
-                            {
-                                <div class="card @card.Suit.ToString().ToLower()">
-                                    <div class="rank">@card.DisplayValue</div>
-                                    <div class="suit">@GetSuitSymbol(card.Suit)</div>
-                                </div>
-                            }
-                        }
-                    </div>
+<h3 class="text-center my-4">Új póker játék indítása</h3>
 
-                    <!-- Dealer -->
-                    <div class="seat-dealer">
-                        <strong>Dealer</strong>
-                    </div>
+<div class="card mx-auto w-100 h-100" style="max-width: 400px;">
+    <div class="card-body">
+        <EditForm Model="model"
+                  OnValidSubmit="CreateGame"
+                  FormName="newGameForm">
+            <DataAnnotationsValidator />
+            <ValidationSummary />
 
-                    <!-- Játékos ülések -->
-                    @if (GameState.CurrentGame.Players is not null)
-                    {
-                        @foreach (var player in GameState.CurrentGame.Players)
-                        {
-                            string cssClasses = string.Empty;
-                            // Ha van nyertes, és a jelenlegi játékos az az, akkor jelenítsük meg
-                            if (GameState.CurrentGame.CurrentGameAction == GameActions.ShowOff
-                            && GameState.Winners != null
-                            && GameState.Winners.Any(w => w.PlayerId == player.Id))
-                            {
-                                cssClasses += "bg-warning ";
-                            }
-                            // Ha játékos action következik és a jelenlegi játékos a soron következő, akkor jelenítsük meg
-                            if (GameState.CurrentGame.CurrentGameAction == GameActions.PlayerAction
-                            && player.Id == GameState.CurrentGame.GetCurrentPlayersId())
-                            {
-                                cssClasses += "border border-primary bg-success ";
-                            }
+            <div class="mb-3">
+                <label for="playerName" class="form-label">Játékos neve:</label>
+                <InputText id="playerName"
+                           @bind-Value="model.PlayerName"
+                           class="form-control" />
+            </div>
 
-                            // Játékos komponens:
-                            <div class="player-seat seat-@player.Seat @cssClasses">
-                                @if (GameState.CurrentGame.CurrentHand.PivotPlayerId == player.Id)
-                                {
-                                    <strong>PIVOT</strong>
-                                }
-                                <strong>@player.Name</strong>
-                                <div>@player.Chips chips</div>
+            <div class="mb-3">
+                <label for="numBots" class="form-label">Botok száma:</label>
+                <InputNumber id="numBots"
+                             @bind-Value="model.NumBots"
+                             class="form-control"
+                             min="1" />
+            </div>
 
-                                @if (player.BlindStatus == BlindStatus.SmallBlind)
-                                {
-                                    <div>Kis VAK</div>
-                                }
-                                else if (player.BlindStatus == BlindStatus.BigBlind)
-                                {
-                                    <div>Nagy VAK</div>
-                                }
-                                @if (player.PlayerStatus != PlayerStatus.Folded)
-                                {
-                                    <div class="player-cards">
-
-                                        @if (GameState.CurrentGame.CurrentGameAction == GameActions.ShowOff
-                                       || _engine.GetUserId() == player.Id || player.HasToRevealCards)
-                                        {
-                                            @foreach (var card in player.HoleCards)
-                                            {
-                                                <div class="card @card.Suit.ToString().ToLower()">
-                                                    <div class="rank">@card.DisplayValue</div>
-                                                    <div class="suit">@GetSuitSymbol(card.Suit)</div>
-                                                </div>
-                                            }
-                                        }
-                                        else
-                                        {
-                                            for (int i = 0; i < 2; i++)
-                                            {
-                                                <div class="card back">
-                                                </div>
-                                            }
-                                        }
-                                    </div>
-                                }
-                            </div>
-                        }
-                    }
-                </div>
-
-                @if (GameState.CurrentGame.CurrentGameAction == GameActions.PlayerAction && _engine.GetUserId() == _engine.GetCurrentPlayersId())
+            <button type="submit"
+                    class="btn btn-primary w-100"
+                    disabled="@isCreating">
+                @if (isCreating)
                 {
-                    <!-- Action toolbar: játékos akciógombok -->
-                    <div class="action-toolbar-container">
-                        <div class="action-toolbar shadow">
-                            <button class="btn btn-danger action-btn" @onclick="Fold">Fold</button>
-                            <button class="btn btn-primary action-btn" @onclick="Call">Call</button>
-                            <div class="raise-container">
-                                <label for="raiseRange" class="raise-label">Raise: @raiseAmount</label>
-                                <input id="raiseRange" type="range" min="0" max="@MaxRaise" @bind="raiseAmount" class="raise-slider" />
-                                <button class="btn btn-success action-btn" @onclick="() => Raise(raiseAmount)">Raise</button>
-                            </div>
-                        </div>
-                    </div>
+                    <span class="spinner-border spinner-border-sm"></span>
+                    <span> Indul...</span>
                 }
+                else
+                {
+                    <span>Új játék indítása</span>
+                }
+            </button>
 
-
-                <!-- Bot akciók visszajelzése -->
-                @* <div class="text-center mt-3">
-                <p><strong>Bot Akció:</strong> @game.CurrentHand.</p>
-            </div> *@
-            }
-            else
+            @if (!string.IsNullOrEmpty(error))
             {
-                <div>Betöltés..</div>
+                <div class="text-danger mt-2">@error</div>
             }
-        </div>
-    }
-
-}
-
+        </EditForm>
+    </div>
+</div>
 
 @code {
+    // 1) A form modellje
+    private NewGameModel model = new();
+    private bool isCreating;
+    private string? error;
 
-    private bool isLoading = true;
-    private bool hasError = false;
-
-    private PokerGameEngine? _engine;
-
-    private int raiseAmount = 0;
-    private int MaxRaise
+    // 2) A POST CreateGame metódus
+    private async Task CreateGame()
     {
-        get
-        {
-            var player = GameState.CurrentGame?.Players?.FirstOrDefault(p => p.Id == _engine.GetUserId());
-            return player?.Chips ?? 0;
-        }
-    }
+        isCreating = true;
+        error = null;
 
-    #region Player actions methods
-    private void Fold() => _engine!.RecordPlayerAction(new PlayerAction(PlayerActionType.Fold, null));
-    private void Call() => _engine!.RecordPlayerAction(new PlayerAction(PlayerActionType.Call, null));
-    private void Raise(int amount) => _engine!.RecordPlayerAction(new PlayerAction(PlayerActionType.Raise, amount));
-    #endregion
-
-    protected override async Task OnInitializedAsync()
-    {
-        Logger.LogInformation("Kliens elindítva");
         try
         {
-            GameState.OnChange += RefreshUI;
-            await StartGameEngineAsync();
+            var client = HttpFactory.CreateClient("PokerClient");
+
+            // Felépítjük a kérés body-ját:
+            var request = new CreateGameRequest
+                {
+                    NumOfBots = model.NumBots,
+                    PlayerName = model.PlayerName
+                };
+
+            // POST newgame
+            var response = await client.PostAsJsonAsync("newgame", request);
+            response.EnsureSuccessStatusCode();
+
+            // A válaszban kapott Game objektum
+            var game = await response.Content.ReadFromJsonAsync<Game>()
+                       ?? throw new InvalidOperationException("Üres válasz a szerverről.");
+
+            // Beállítjuk a GameState-ben
+            GameState.UpdateGame(game);
+
+            // Átirányítás a póker oldalra a game Id-val
+            NavigationManager.NavigateTo($"/poker/game");
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error a game inicializálása közben: {ex.Message}");
-            hasError = true;
+            error = ex.Message;
+        }
+        finally
+        {
+            isCreating = false;
         }
     }
 
-    private async Task StartGameEngineAsync()
+    public class NewGameModel
     {
-        var engineLogger = LoggerFactory.CreateLogger<PokerGameEngine>();
-        _engine = new PokerGameEngine(HttpFactory, engineLogger, StateHasChanged, GameState);
-        await _engine.InitAsync(CancellationToken.None);
-        _engine.Start();
-        isLoading = false;
+        [Required]
+        public string PlayerName { get; set; } = "Player";
+
+        [Range(1, 10, ErrorMessage = "Legalább 1 bot kell.")]
+        public int NumBots { get; set; } = 5;
     }
-
-
-    private async Task<Game> GetGameAsync(HttpClient http) =>
-        await http.GetFromJsonAsync<Game>("getgame")
-        ?? throw new InvalidOperationException("A 'games' API nem adott vissza játékot.");
-
-    private async void RefreshUI()
-    {
-        await InvokeAsync(StateHasChanged);
-    }
-
-    private string GetSuitSymbol(Suit suit) =>
-        suit switch
-        {
-            Suit.Clubs => "♣",
-            Suit.Diamonds => "♦",
-            Suit.Hearts => "♥",
-            Suit.Spades => "♠",
-            _ => ""
-        };
-
-
-
-    public void Dispose() => GameState.OnChange -= RefreshUI;
 }

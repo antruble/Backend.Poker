@@ -39,6 +39,7 @@ namespace Frontend.WebAssembly.Poker.Services
         {
             Winners = winners;
         }
+
         public void ResetWinners()
         {
             Winners = [];
