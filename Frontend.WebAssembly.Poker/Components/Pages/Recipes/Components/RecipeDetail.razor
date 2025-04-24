@@ -1,0 +1,12 @@
+﻿@using Frontend.WebAssembly.Poker.ViewModels
+
+<div class="card p-4 w-100 h-100">
+	<h4>@Recipe.Title</h4>
+	<p>@Recipe.DetailedRecipe</p>
+	<button class="btn btn-secondary" @onclick="OnBack">Vissza az ajánlásokhoz</button>
+</div>
+
+@code {
+	[Parameter] public RecipeSuggestion Recipe { get; set; } = default!;
+	[Parameter] public EventCallback OnBack { get; set; }
+}

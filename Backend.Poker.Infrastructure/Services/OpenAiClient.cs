@@ -19,7 +19,7 @@ namespace Backend.Poker.Infrastructure.Services
         public OpenAiClient(IConfiguration configuration)
         {
             //var apiKey = configuration["OpenAI:ApiKey"];
-            var apiKey = "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";
+            var apiKey = "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";
             var model = "gpt-4.1-nano";
 
             _client = new(

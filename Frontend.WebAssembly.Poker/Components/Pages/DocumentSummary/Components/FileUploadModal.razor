@@ -1,0 +1,60 @@
+﻿@using Microsoft.AspNetCore.Components.Forms
+@rendermode InteractiveServer
+
+<div class="modal fade show d-block" tabindex="-1" role="dialog" style="background-color: rgba(0,0,0,0.5);">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+    <div class="modal-content border-0 shadow-lg">
+      <div class="modal-header bg-primary text-white">
+        <h5 class="modal-title">Fájl feltöltés</h5>
+        <button type="button" class="btn-close" @onclick="OnCancel" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-2">Válassza ki a feltöltendő dokumentumot:</p>
+        <InputFile OnChange="OnFileSelected" class="form-control mb-4" />
+        <label class="form-label"><strong>Válassza ki a kívánt stílust:</strong></label>
+        <div class="btn-group d-flex" role="group">
+          @foreach (var style in AvailableStyles)
+          {
+            <button type="button"
+                    class="btn @(SelectedStyle == style ? "btn-primary" : "btn-outline-primary") flex-fill"
+                    @onclick="() => SelectStyle(style)">
+              @style.ToUpper()
+            </button>
+          }
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-success w-100"
+                @onclick="OnUpload"
+                disabled="@(SelectedFile == null)">
+          Fájl feltöltése és összefoglalás indítása
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+@code {
+  [Parameter] public IBrowserFile? SelectedFile { get; set; }
+  [Parameter] public EventCallback<IBrowserFile> SelectedFileChanged { get; set; }
+  [Parameter] public string[] AvailableStyles { get; set; } = Array.Empty<string>();
+  [Parameter] public string SelectedStyle { get; set; } = "";
+  [Parameter] public EventCallback<string> SelectedStyleChanged { get; set; }
+  [Parameter] public EventCallback OnUploadClicked { get; set; }
+  [Parameter] public EventCallback OnCancel { get; set; }
+
+  private async Task OnFileSelected(InputFileChangeEventArgs e)
+  {
+    await SelectedFileChanged.InvokeAsync(e.File);
+  }
+
+  private async Task SelectStyle(string style)
+  {
+    await SelectedStyleChanged.InvokeAsync(style);
+  }
+
+  private async Task OnUpload()
+  {
+    await OnUploadClicked.InvokeAsync();
+  }
+}

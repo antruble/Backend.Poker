@@ -1,0 +1,27 @@
+﻿@using Frontend.WebAssembly.Poker.ViewModels
+
+<div>
+    <h4>Ajánlott receptek</h4>
+    <div class="row">
+        @foreach (var recipe in Recipes)
+        {
+            <div class="col-md-4 mb-3">
+                <div class="card h-100 w-100">
+                    <div class="card-body d-flex flex-column">
+                        <h5 class="card-title">@recipe.Title</h5>
+                        <p class="card-text flex-grow-1">@recipe.ShortDescription</p>
+                        <button class="btn btn-info mt-2"
+                                @onclick="() => OnSelectRecipe.InvokeAsync(recipe)">
+                            Részletek
+                        </button>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public List<RecipeSuggestion> Recipes { get; set; } = new();
+    [Parameter] public EventCallback<RecipeSuggestion> OnSelectRecipe { get; set; }
+}

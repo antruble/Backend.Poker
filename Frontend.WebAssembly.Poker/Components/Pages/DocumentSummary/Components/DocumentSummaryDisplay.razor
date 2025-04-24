@@ -1,0 +1,25 @@
+﻿@using Backend.Poker.Shared.Models.DocumentSummary
+
+<div class="container my-4">
+    <div class="d-flex justify-content-end mb-3">
+        <button class="btn btn-secondary" @onclick="OnNewUpload">Új fájl feltöltése</button>
+    </div>
+    <div class="card shadow w-100 h-100">
+        <div class="card-header bg-primary text-white">
+            <h5 class="card-title mb-0">Összefoglaló - @RenderedStyle stílusban</h5>
+        </div>
+        <div class="card-body">
+            <h6 class="card-subtitle mb-3 text-muted">Rövid összegzés</h6>
+            <p>@Response.ShortSummary</p>
+            <hr />
+            <h6 class="card-subtitle mb-3 text-muted">Részletes összegzés</h6>
+            <p>@Response.DetailedSummary</p>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public DocumentSummaryApiResult Response { get; set; } = default!;
+    [Parameter] public string RenderedStyle { get; set; } = "";
+    [Parameter] public EventCallback OnNewUpload { get; set; }
+}

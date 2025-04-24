@@ -1,11 +1,92 @@
 ﻿@page "/recipes"
 @rendermode InteractiveServer
+
+@using System.Net.Http.Json
+@using Frontend.WebAssembly.Poker.ViewModels
+@using Frontend.WebAssembly.Poker.Components.Pages.Recipes.Components
+@inject IHttpClientFactory HttpFactory
+
+<div class="container my-4">
+  @if (selectedRecipe == null && (recipes == null || !recipes.Any()))
+  {
+    <RecipeSearchForm
+      Description="@recipeDescription"
+      DescriptionChanged="d => recipeDescription = d"
+      Ingredients="ingredients"
+      IngredientsChanged="list => ingredients = list"
+      OnSearchClicked="GetRecipes" />
+  }
+  else if (selectedRecipe == null)
+  {
+    <RecipeList
+      Recipes="recipes"
+      OnSelectRecipe="r => SelectRecipe(r)" />
+  }
+  else
+  {
+    <RecipeDetail
+      Recipe="selectedRecipe"
+      OnBack="() => selectedRecipe = null" />
+  }
+</div>
+
+@code {
+  private string recipeDescription = "";
+  private List<string> ingredients = new();
+
+  private List<RecipeSuggestion>? recipes;
+  private RecipeSuggestion? selectedRecipe;
+
+  private HttpClient? _http;
+
+  protected override void OnInitialized()
+  {
+    _http = HttpFactory.CreateClient("RecipesClient");
+  }
+
+  private async Task GetRecipes()
+  {
+    if (_http == null) return;
+
+    var request = new RecipeRequest
+    {
+      Description = recipeDescription,
+      Ingredients = ingredients
+    };
+
+    try
+    {
+      var resp = await _http.PostAsJsonAsync("generate", request);
+      if (resp.IsSuccessStatusCode)
+      {
+        var result = await resp.Content.ReadFromJsonAsync<List<RecipeSuggestion>>();
+        recipes = result ?? new List<RecipeSuggestion>();
+        selectedRecipe = null;
+      }
+      else
+      {
+        Console.Error.WriteLine($"Hiba: {resp.ReasonPhrase}");
+      }
+    }
+    catch (Exception ex)
+    {
+      Console.Error.WriteLine($"Kivétel a lekérés során: {ex.Message}");
+    }
+  }
+
+  private void SelectRecipe(RecipeSuggestion r)
+  {
+    selectedRecipe = r;
+  }
+}
+
+@* @page "/recipes"
+@rendermode InteractiveServer
 @using System.Threading.Tasks
 @using System.Collections.Generic
 @using System.Net.Http
 @using System.Net.Http.Json
 @using Frontend.WebAssembly.Poker.Components.Layout
-@* @layout SecondaryLayout *@
 
 
 @inject IHttpClientFactory HttpFactory
@@ -231,3 +312,4 @@
         public List<string> Ingredients { get; set; }
     }
 }
+ *@

@@ -1,7 +1,8 @@
 ﻿@page "/documentsummary/"
 @rendermode InteractiveServer
+
 @using Backend.Poker.Shared.Models.DocumentSummary
-@using Microsoft.AspNetCore.Components.Forms
+@using Frontend.WebAssembly.Poker.Components.Pages.DocumentSummary.Components
 @inject IHttpClientFactory HttpFactory
 
 <div class="container py-5">
@@ -9,70 +10,23 @@
 
     @if (showUploadModal)
     {
-        <div id="fileUploadModal" class="modal fade show d-block" tabindex="-1" role="dialog" style="background-color: rgba(0,0,0,0.5);">
-            <div class="modal-dialog modal-dialog-centered" role="document">
-                <div class="modal-content border-0 shadow-lg">
-                    <div class="modal-header bg-primary text-white">
-                        <h5 class="modal-title">Fájl feltöltés</h5>
-                        <button type="button" class="btn-close" aria-label="Close" @onclick="() => showUploadModal = false"></button>
-                    </div>
-                    <div class="modal-body">
-                        <div class="mb-4">
-                            <p class="mb-2">Válassza ki a feltöltendő dokumentumot:</p>
-                            <InputFile OnChange="OnFileSelected" class="form-control" />
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label"><strong>Válassza ki a kívánt stílust:</strong></label>
-                            <div class="btn-group d-flex" role="group">
-                                @foreach (var style in availableStyles)
-                                {
-                                    <button type="button" class="btn @(selectedStyle == style ? "btn-primary" : "btn-outline-primary") flex-fill"
-                                    @onclick="() => selectedStyle = style">
-                                        @style.ToUpper()
-                                    </button>
-                                }
-                            </div>
-                        </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button class="btn btn-success w-100" @onclick="StartUpload" disabled="@(selectedFile == null)">
-                            Fájl feltöltése és összefoglalás indítása
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
+        <FileUploadModal SelectedFile="selectedFile"
+                         SelectedFileChanged="f => selectedFile = f"
+                         AvailableStyles="availableStyles"
+                         SelectedStyle="selectedStyle"
+                         SelectedStyleChanged="s => selectedStyle = s"
+                         OnUploadClicked="StartUpload"
+                         OnCancel="() => showUploadModal = false" />
     }
-
-    @if (isProcessing)
+    else if (isProcessing)
     {
-        <div class="text-center my-5">
-            <div class="spinner-border text-primary" role="status" style="width: 4rem; height: 4rem;">
-                <span class="visually-hidden">Feldolgozás...</span>
-            </div>
-            <h5 class="mt-3">Dokumentum feldolgozása, kérem várjon...</h5>
-        </div>
+        <ProcessingSpinner />
     }
-
-    @if (aiResponse != null)
+    else if (aiResponse != null)
     {
-        <div class="container my-4">
-            <div class="d-flex justify-content-end mb-3">
-                <button class="btn btn-secondary" @onclick="() => showUploadModal = true">Új fájl feltöltése</button>
-            </div>
-            <div class="card shadow w-100 h-100">
-                <div class="card-header bg-primary text-white">
-                    <h5 class="card-title mb-0">Összefoglaló - @renderedStyle stílusban</h5>
-                </div>
-                <div class="card-body">
-                    <h6 class="card-subtitle mb-3 text-muted">Rövid összegzés</h6>
-                    <p>@aiResponse.ShortSummary</p>
-                    <hr />
-                    <h6 class="card-subtitle mb-3 text-muted">Részletes összegzés</h6>
-                    <p>@aiResponse.DetailedSummary</p>
-                </div>
-            </div>
-        </div>
+        <DocumentSummaryDisplay Response="aiResponse"
+                                RenderedStyle="renderedStyle"
+                                OnNewUpload="() => showUploadModal = true" />
     }
 </div>
 
@@ -81,48 +35,37 @@
     private bool isProcessing = false;
     private DocumentSummaryApiResult? aiResponse;
 
-    private string[] availableStyles = { "academic", "practical", "simple" };
-
+    private readonly string[] availableStyles = { "academic", "practical", "simple" };
     private string selectedStyle = "academic";
     private string renderedStyle = "academic";
 
     private IBrowserFile? selectedFile;
+    private HttpClient? _http;
 
-    HttpClient? _http;
-
-    protected override async Task OnInitializedAsync()
+    protected override void OnInitialized()
     {
         _http = HttpFactory.CreateClient("DocumentSummaryClient");
     }
 
-    private async Task OnFileSelected(InputFileChangeEventArgs e)
-    {
-        selectedFile = e.File;
-    }
-
     private async Task StartUpload()
     {
-        if (selectedFile == null)
-            return;
-
+        if (selectedFile == null) return;
         showUploadModal = false;
         isProcessing = true;
 
         try
         {
-            var streamContent = new StreamContent(selectedFile.OpenReadStream(maxAllowedSize: 1024 * 1024 * 15));
-            streamContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(selectedFile.ContentType);
+            var content = new MultipartFormDataContent {
+        { new StreamContent(selectedFile.OpenReadStream(15 * 1024 * 1024))
+            { Headers = { ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(selectedFile.ContentType) } },
+          "file", selectedFile.Name },
+        { new StringContent(selectedStyle), "style" }
+      };
 
-            var content = new MultipartFormDataContent
+            var resp = await _http!.PostAsync("upload", content);
+            if (resp.IsSuccessStatusCode)
             {
-                { streamContent, "file", selectedFile.Name },
-                { new StringContent(selectedStyle), "style" }
-            };
-
-            var response = await _http!.PostAsync("upload", content);
-            if (response.IsSuccessStatusCode)
-            {
-                aiResponse = await response.Content.ReadFromJsonAsync<DocumentSummaryApiResult>();
+                aiResponse = await resp.Content.ReadFromJsonAsync<DocumentSummaryApiResult>();
                 renderedStyle = selectedStyle;
             }
             else

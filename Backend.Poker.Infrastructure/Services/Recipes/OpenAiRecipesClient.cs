@@ -28,8 +28,7 @@ namespace Backend.Poker.Infrastructure.Services.Recipes
         {
             // Az API kulcs és modell beállítása
             // Az apiKey-t a konfigurációból vesszük, itt egy előre megadott érték vagy üres string lehet
-            var apiKey = "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";
-            //var apiKey = configuration["OpenAI:ApiKey"] ?? "";
+            var apiKey = configuration["OpenAI:ApiKey"] ?? "";
             var model = "gpt-4.1-nano";
 
             _client = new ChatClient(model: model, apiKey: apiKey);
