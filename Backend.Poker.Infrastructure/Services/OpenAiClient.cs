@@ -18,8 +18,6 @@ namespace Backend.Poker.Infrastructure.Services
 
         public OpenAiClient(IConfiguration configuration)
         {
-            var apiKey = configuration["OpenAI:ApiKey"];
-            var model = "gpt-4.1-nano";
 
             _client = new(
                 model: model,
